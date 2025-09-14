@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>La Piramide Matematica 3D</title>
   <style>
-    html,body{height:100%;margin:0;background:#ffffff;color:#222;
+    html,body{height:100%;margin:0;background:#fff;color:#111;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     .bar{
       position:sticky;top:0;display:flex;gap:10px;align-items:center;
@@ -17,25 +17,20 @@
       color:#0b5fff;font-weight:700;cursor:pointer;touch-action:manipulation
     }
     .bar .status{margin-left:8px;font-weight:700}
-    #stage{height:calc(100vh - 64px)}
-    .banner{
-      text-align:center;padding:12px;font-size:1.1rem;font-weight:600;
-      background:#f0f0f0;color:#333
-    }
+    #stage{height:calc(100vh - 54px)}
+    .banner{position:absolute;top:60px;left:50%;transform:translateX(-50%);
+      font-size:1.2rem;font-weight:700;color:#333;pointer-events:none}
   </style>
 </head>
 <body>
   <div class="bar">
-    <h1>🧩 La Piramide Matematica 3D</h1>
+    <h1>🧩 La Piramide Matematica 3D (5,4,3,2,1)</h1>
     <button id="btn-shuffle">Mescola 5</button>
     <button id="btn-reset">Reset</button>
     <span class="status" id="status">Differenze uniche: <b>0/10</b></span>
   </div>
-
-  <div class="banner">Doppio clic per iniziare</div>
-
   <div id="stage" aria-label="Piramide di cubi 3D"></div>
-
+  <div class="banner">👉 Doppio clic per iniziare</div>
   <script src="three.js"></script>
   <script src="pyramid.js"></script>
 </body>
