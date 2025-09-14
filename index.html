@@ -8,47 +8,34 @@
     :root { --bar:#0b5fff; --text:#0b5fff; }
     html,body{height:100%;margin:0;background:#fff;color:#111;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    .bar{
-      position:sticky;top:0;display:flex;gap:10px;align-items:center;
-      padding:10px 14px;background:var(--bar);color:#fff;z-index:2
-    }
+    .bar{position:sticky;top:0;display:flex;gap:10px;align-items:center;
+      padding:10px 14px;background:var(--bar);color:#fff;z-index:2}
     .bar h1{margin:0;font-size:1rem;margin-right:auto}
-    .bar button,.bar select{
-      border:0;border-radius:10px;padding:8px 12px;background:#fff;
-      color:var(--text);font-weight:700;cursor:pointer;touch-action:manipulation
-    }
+    .bar button,.bar select{border:0;border-radius:10px;padding:8px 12px;background:#fff;
+      color:var(--text);font-weight:700;cursor:pointer;touch-action:manipulation}
     .bar .status{margin-left:8px;font-weight:700}
-    #palette{
-      display:flex;flex-wrap:wrap;gap:6px; padding:10px 14px; border-bottom:1px solid #eee;
-      background:#fff
-    }
-    #palette button{
-      border:2px solid #ddd;border-radius:10px;padding:6px 10px;font-weight:700;
-      background:#fff; cursor:pointer
-    }
+    #palette{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;border-bottom:1px solid #eee;background:#fff}
+    #palette button{border:2px solid #ddd;border-radius:10px;padding:6px 10px;font-weight:700;background:#fff;cursor:pointer}
     body.hidePalette #palette{display:none}
     #stage{height:calc(100vh - 54px)}
-    canvas{display:block; width:100%; height:100%}
+    canvas{display:block;width:100%;height:100%}
   </style>
 </head>
 <body>
   <div class="bar">
     <h1>La Piramide Matematica</h1>
     <select id="view">
-      <option value="math">Matematica</option>
-      <option value="layers" selected>Strati 5×5→1</option>
+      <option value="math" selected>Matematica</option>
+      <option value="layers">Strati 5×5→1</option>
     </select>
     <button id="btn-shuffle">Mescola 5</button>
     <button id="btn-reset">Reset</button>
     <span class="status" id="status">—</span>
   </div>
 
-  <!-- Palette numeri (solo in vista “Matematica”) -->
-  <div id="palette" aria-hidden="true"></div>
-
+  <div id="palette" aria-hidden="false"></div>
   <div id="stage" aria-label="Piramide di cubi 3D"></div>
 
-  <!-- Three.js locale: se preferisci CDN, sostituisci con la tua versione -->
   <script src="three.js"></script>
   <script src="pyramid.js"></script>
 </body>
