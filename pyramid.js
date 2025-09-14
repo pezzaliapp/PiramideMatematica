@@ -1,274 +1,266 @@
 (()=>{'use strict';
 
-/* =========================================================
-   Piramide Matematica 3D
-   — livelli: 5x5, 4x4, 3x3, 2x2, 1x1 (base in alto, punta in basso)
-   — 5 numeri in cima (top5) → differenze assolute fino alla punta
-   — ogni cubo mostra lo stesso numero su tutte le facce
-   — evidenziazione rossa quando una differenza è 0 o compare più volte
-   — “Mescola 5” e “Reset”
-   ========================================================= */
-
-const $ = (sel)=>document.querySelector(sel);
-const stage  = $('#stage');
-const btnShuffle = $('#btn-shuffle');
-const btnReset   = $('#btn-reset');
-const statusEl   = $('#status');
-
-// ---------- Three.js base ----------
-const scene = new THREE.Scene();
+/* =======================
+   Setup scena/camera/render
+   ======================= */
+const stage = document.getElementById('stage');
+const scene  = new THREE.Scene();
 scene.background = new THREE.Color(0x1f2430);
 
 const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
-camera.position.set(0, 30, 46);
+camera.position.set(0, 28, 46);
 camera.lookAt(0,0,0);
 
 const renderer = new THREE.WebGLRenderer({ antialias:true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(stage.clientWidth, stage.clientHeight);
 stage.appendChild(renderer.domElement);
 
-// luci (irrilevanti per MeshBasicMaterial, ma lasciamo ambient per eventuali futuri abbellimenti)
-scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-const dir = new THREE.DirectionalLight(0xffffff, 0.4);
-dir.position.set(10,20,14); scene.add(dir);
+// Luci (gli sticker usano materiali "Basic" quindi non influenzati; la plastica sì)
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const dir = new THREE.DirectionalLight(0xffffff, 0.45);
+dir.position.set(10,20,14);
+scene.add(dir);
 
-// resize
+/* =======================
+   Adattamento viewport
+   ======================= */
 function onResize(){
   const w = stage.clientWidth, h = stage.clientHeight;
-  camera.aspect = w/h; camera.updateProjectionMatrix();
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
   renderer.setSize(w,h);
-  renderer.render(scene,camera);
+  renderOnce();
 }
 window.addEventListener('resize', onResize, {passive:true});
 onResize();
 
-// ---------- parametri piramide ----------
-const LAYERS = [5,4,3,2,1];  // 5x5 → 1x1
-const STEP   = 2.2;          // passo griglia X/Z
-const STEP_Y = 2.2;          // distanza verticale layer
-const SIZE   = 2.18;         // lato cubo (quasi STEP per “blocchi uniti”)
-const GEO    = new THREE.BoxGeometry(SIZE, SIZE, SIZE);
+/* =======================
+   Parametri piramide
+   ======================= */
+// Layer: base in alto (5x5) → … → punta (1x1) in basso
+const LAYERS = [5,4,3,2,1];
 
-// palette: 5 colori per le 5 “colonne” (si ripetono per j)
-const COLS = [0x2d8cff, 0x2ec27e, 0xfad643, 0xff7b2f, 0xdb3a34];
+// Spaziatura/scala: impostati per avere “blocchi uniti” a piramide
+const STEP   = 2.2;   // distanza centri X/Z
+const STEP_Y = 2.2;   // distanza verticale tra layer
+const SIZE   = 2.18;  // lato cubo (≈ STEP per aspetto pieno)
 
-// ---------- numeri & texture su tutte le facce ----------
-const TEX_CACHE = new Map(); // `${num}-${colorHex}` o `${num}-${colorHex}-bad` → CanvasTexture
+const GEO  = new THREE.BoxGeometry(SIZE, SIZE, SIZE);
 
-function numberTextureAllFaces(num, colorHex){
-  const key = `${num}-${colorHex}`;
-  const cached = TEX_CACHE.get(key);
-  if (cached) return cached;
+/* =======================
+   Utility colori & texture numeri
+   ======================= */
+function hsvToRgb(h, s, v){
+  let f = (n, k=(n+h*6)%6)=> v - v*s*Math.max(Math.min(k,4-k,1),0);
+  const r = Math.round(f(5)*255);
+  const g = Math.round(f(3)*255);
+  const b = Math.round(f(1)*255);
+  return (r<<16) | (g<<8) | b;
+}
 
-  const c = document.createElement('canvas'); c.width = c.height = 256;
+// palette 15 colori (ciclica se servisse di più)
+const BASE_COLORS = Array.from({length:15},(_,i)=>hsvToRgb(i/15, 0.55, 0.95));
+
+/** CanvasTexture con il numero “num” (bianco) su sfondo “bgHex”. */
+function makeNumberTexture(num, bgHex){
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
   const g = c.getContext('2d');
 
-  // sfondo = coloreHex
-  const r = (colorHex>>16)&255, gC=(colorHex>>8)&255, b=colorHex&255;
-  g.fillStyle = `rgb(${r},${gC},${b})`;
+  // sfondo
+  g.fillStyle = `#${bgHex.toString(16).padStart(6,'0')}`;
   g.fillRect(0,0,256,256);
 
-  // numero (ombra + bianco)
-  g.font = 'bold 172px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
+  // numero
+  g.fillStyle = '#ffffff';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
 
-  g.fillStyle = 'rgba(0,0,0,0.25)'; // ombra
-  g.fillText(String(num ?? ''), 132, 156);
-  g.fillStyle = '#ffffff';
-  g.fillText(String(num ?? ''), 128, 152);
+  // dimensione dinamica (2 o 3 cifre)
+  const text = String(num);
+  const fontSize = (text.length>=2) ? 150 : 170;
+  g.font = `bold ${fontSize}px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif`;
+  g.fillText(text, 128, 140);
 
-  const tex = new THREE.CanvasTexture(c);
-  tex.anisotropy = 4;
-  tex.needsUpdate = true;
-  TEX_CACHE.set(key, tex);
-  return tex;
+  const tx = new THREE.CanvasTexture(c);
+  tx.anisotropy = 4;
+  tx.needsUpdate = true;
+  return tx;
 }
 
-function numberTextureAllFacesWithBorder(num, colorHex){
-  const key = `${num}-${colorHex}-bad`;
-  const cached = TEX_CACHE.get(key);
-  if (cached) return cached;
+/** Crea i 6 materiali per un cubo:
+ *  - plastica scura come “base” (MeshStandard)
+ *  - su ogni faccia applico una MeshBasic col numero (non influenzata dalle luci)
+ */
+function matsFor(num, baseHex){
+  // plastica “bordo” (non si vede molto perché coperta dalle facce basic)
+  const plastic = new THREE.MeshStandardMaterial({ color:0x20232c, metalness:0.1, roughness:0.6 });
 
-  const base = numberTextureAllFaces(num, colorHex);
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const g = c.getContext('2d');
-  g.drawImage(base.image, 0, 0);
+  // 6 facce con numeri (Basic = non soggetta a shading → niente zone scure in base all’illuminazione)
+  const face = (axis)=> new THREE.MeshBasicMaterial({ map: makeNumberTexture(num, baseHex) });
 
-  // bordo rosso di evidenziazione
-  g.lineWidth = 12; g.strokeStyle = '#c0392b';
-  g.strokeRect(6, 6, 244, 244);
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.anisotropy = 4; tex.needsUpdate = true;
-  TEX_CACHE.set(key, tex);
-  return tex;
+  // NB: l’ordine materiali di BoxGeometry è: +X, -X, +Y, -Y, +Z, -Z
+  return [
+    face('+x'), face('-x'),
+    face('+y'), face('-y'),
+    face('+z'), face('-z'),
+  ].map(m => m);
 }
 
-// 6 facce con la stessa texture (numero + colore)
-function matsFor(value, colorHex){
-  const t = numberTextureAllFaces(value, colorHex);
-  const m = new THREE.MeshBasicMaterial({ map: t });
-  return [m.clone(), m.clone(), m.clone(), m.clone(), m.clone(), m.clone()];
-}
-
-// ---------- posizionamento ----------
-function posFor(layerIdx, i, j){
+/* =======================
+   Posizionamento blocchi
+   ======================= */
+function positionFor(layerIdx,i,j){
   const N = LAYERS[layerIdx];
   const x = (i - (N-1)/2) * STEP;
   const z = (j - (N-1)/2) * STEP;
-  const y = - layerIdx * STEP_Y;  // base in alto (y=0), giù verso la punta
+  const y = - layerIdx * STEP_Y;  // base in alto (y=0), scende verso la punta
   return new THREE.Vector3(x,y,z);
 }
 
-// ---------- stato numerico (top5 → differenze) ----------
-let top5 = [1,2,3,4,5];                 // valori iniziali
-const rows = Array.from({length:5},(_,i)=>Array(LAYERS[i]).fill(0));
-
-function computeRows(){
-  rows[0] = top5.slice(); // 5
-  for (let l=1; l<LAYERS.length; l++){
-    const prev = rows[l-1];
-    const cur  = rows[l];
-    for (let i=0; i<cur.length; i++){
-      cur[i] = Math.abs(prev[i] - prev[i+1]);
-    }
-  }
-}
-
-// ---------- costruzione piramide ----------
-const cubes = []; // {mesh, mats[], layer, i, j}
+/* =======================
+   Costruzione piramide
+   ======================= */
+const cubes = []; // {mesh, layer, i, j, n, colorHex}
 
 function buildScene(){
   // pulizia
-  while(scene.children.find(o=>o.isMesh)) {
-    const idx = scene.children.findIndex(o=>o.isMesh);
-    scene.remove(scene.children[idx]);
-  }
+  for(const c of cubes) scene.remove(c.mesh);
   cubes.length = 0;
 
-  for (let l=0; l<LAYERS.length; l++){
+  let k = 1; // numeri 1..15 ripetuti per riempire tutta la piramide
+  for(let l=0; l<LAYERS.length; l++){
     const N = LAYERS[l];
-    for (let i=0; i<N; i++){
-      for (let j=0; j<N; j++){
-        const val  = rows[l][i];                // stesso valore per tutti i j della colonna i
-        const col  = COLS[i % COLS.length];
-        const mats = matsFor(val, col);
-        const mesh = new THREE.Mesh(GEO, mats);
-        mesh.position.copy(posFor(l, i, j));
-        scene.add(mesh);
-        cubes.push({ mesh, mats, layer:l, i, j });
+    for(let i=0;i<N;i++){
+      for(let j=0;j<N;j++){
+        const num = ((k-1) % 15) + 1;
+        const colorHex = BASE_COLORS[(num-1) % BASE_COLORS.length];
+
+        const materials = matsFor(num, colorHex);
+        // trucco: Mesh con 6 materiali Basic “sopra”, ma teniamo anche la plastica scura
+        // → Creo un gruppo con: 1) box plastica (Standard) 2) box facce numerate (Basic) leggermente più piccolo
+        const group = new THREE.Group();
+
+        // plastica
+        const plasticMesh = new THREE.Mesh(GEO, new THREE.MeshStandardMaterial({ color:0x20232c, metalness:0.1, roughness:0.6 }));
+        group.add(plasticMesh);
+
+        // “sticker” numerati (leggermente scalati per non z-fightare)
+        const stickerGeo = GEO.clone();
+        const s = 0.995; // micro-scale in
+        stickerGeo.scale(s,s,s);
+        const stickerMesh = new THREE.Mesh(stickerGeo, materials);
+        group.add(stickerMesh);
+
+        group.position.copy(positionFor(l,i,j));
+        scene.add(group);
+
+        cubes.push({mesh:group, layer:l, i, j, n:num, colorHex});
+        k++;
       }
     }
   }
 }
 
-// ---------- repaint + highlight ----------
-function setStatus(unique){
-  statusEl.innerHTML = `Differenze uniche: <b>${unique}/10</b>`;
-}
-
-function checkUniqueAndHighlight(){
-  // differenze = righe 1..4 (4 + 3 + 2 + 1 = 10)
-  const diffs = rows[1].concat(rows[2], rows[3], rows[4]);
-  const freq = {};
-  diffs.forEach(v => { freq[v] = (freq[v]||0)+1; });
-
-  const badSet = new Set();
-  diffs.forEach(v => { if (v === 0 || freq[v] > 1) badSet.add(v); });
-
-  const uniqueCount = new Set(diffs.filter(v => v > 0)).size;
-  setStatus(uniqueCount);
-
-  // aggiorna texture per ogni cubo in base allo stato
-  for (const c of cubes){
-    const v   = rows[c.layer][c.i];
-    const col = COLS[c.i % COLS.length];
-    const tex = badSet.has(v) ? numberTextureAllFacesWithBorder(v, col)
-                              : numberTextureAllFaces(v, col);
-    for (let f=0; f<6; f++){
-      if (c.mats[f].map !== tex){
-        c.mats[f].map = tex;
-        c.mats[f].needsUpdate = true;
-      }
-    }
-  }
-}
-
-function repaint(){
-  computeRows();
-  // i cubi sono già creati: basta aggiornare le texture
-  checkUniqueAndHighlight();
-}
-
-// ---------- interazione ----------
+/* =======================
+   Interazione: rotazione scena
+   (mouse & touch – iPhone/Android)
+   ======================= */
 let dragging=false, px=0, py=0;
-renderer.domElement.addEventListener('pointerdown', (e)=>{ dragging=true; px=e.clientX; py=e.clientY; });
-window.addEventListener('pointerup', ()=> dragging=false);
-window.addEventListener('pointermove', (e)=>{
+
+function startDrag(x,y){
+  dragging = true; px = x; py = y;
+}
+function moveDrag(x,y){
   if(!dragging) return;
-  const dx=(e.clientX-px)/140, dy=(e.clientY-py)/140;
-  scene.rotation.y += dx; scene.rotation.x += dy;
-  px=e.clientX; py=e.clientY;
-});
+  const dx=(x-px)/140, dy=(y-py)/140;
+  scene.rotation.y += dx;
+  scene.rotation.x += dy;
+  px = x; py = y;
+}
+function endDrag(){ dragging=false; }
 
-// Click sulle 5 colonne del layer superiore per inserire numeri 1..15
-renderer.domElement.addEventListener('click', (e)=>{
-  // raycast solo per il layer 0 (5x5)
-  const rect = renderer.domElement.getBoundingClientRect();
-  const ndc = new THREE.Vector2(
-    ((e.clientX-rect.left)/rect.width)*2-1,
-    -((e.clientY-rect.top)/rect.height)*2+1
-  );
-  const ray = new THREE.Raycaster();
-  ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObjects(scene.children, true);
-  if(!hits.length) return;
+// mouse
+renderer.domElement.addEventListener('mousedown', e=> startDrag(e.clientX,e.clientY));
+window.addEventListener('mouseup', endDrag);
+window.addEventListener('mousemove', e=> moveDrag(e.clientX,e.clientY));
 
-  // risaliamo al mesh del cubo
-  let obj = hits[0].object;
-  while(obj && !obj.isMesh) obj = obj.parent;
-  if(!obj) return;
-
-  // trova il record del cubo
-  const rec = cubes.find(c => c.mesh === obj);
-  if(!rec) return;
-  if(rec.layer !== 0) return; // edit solo in top5
-
-  const colIndex = rec.i; // 0..4
-  const cur = top5[colIndex];
-  let v = window.prompt(`Numero (1..15) per la colonna ${colIndex+1}:`, String(cur));
-  if(v == null) return;
-  v = parseInt(v, 10);
-  if(!Number.isFinite(v) || v < 1 || v > 15){ alert('Inserisci un intero tra 1 e 15.'); return; }
-  top5[colIndex] = v;
-  repaint();
-});
-
-// ---------- pulsanti ----------
-btnShuffle?.addEventListener('click', ()=>{
-  // estrai 5 numeri distinti da 1..15
-  const pool = Array.from({length:15},(_,i)=>i+1);
-  for (let i=pool.length-1; i>0; i--) {
-    const j = Math.floor(Math.random()* (i+1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+// touch
+renderer.domElement.addEventListener('touchstart', e=>{
+  if(e.touches.length===1){
+    const t = e.touches[0];
+    startDrag(t.clientX,t.clientY);
   }
-  top5 = pool.slice(0,5);
-  repaint();
-});
+},{passive:true});
+renderer.domElement.addEventListener('touchmove', e=>{
+  if(e.touches.length===1){
+    const t = e.touches[0];
+    moveDrag(t.clientX,t.clientY);
+  }
+},{passive:true});
+renderer.domElement.addEventListener('touchend', endDrag);
 
-btnReset?.addEventListener('click', ()=>{
-  top5 = [1,2,3,4,5];
+/* =======================
+   UI base (Reset / Mescola)
+   ======================= */
+const $ = (sel)=>document.querySelector(sel);
+function renderOnce(){ renderer.render(scene,camera); }
+
+function resetView(){
   scene.rotation.set(0,0,0);
-  repaint();
-});
+  setStatus(0,10);
+  renderOnce();
+}
 
-// ---------- avvio ----------
-computeRows();
+function setStatus(unique, total){
+  const el = $('#status');
+  if(!el) return;
+  el.innerHTML = `Differenze uniche: <b>${unique}/${total}</b>`;
+}
+
+// demo shuffle: riassegna numeri random a TUTTI i blocchi mantenendo colore per numero (1..15)
+function shuffleAll(){
+  // genera permutazione di 1..15
+  const base = Array.from({length:15}, (_,i)=>i+1);
+  for(let i=base.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [base[i], base[j]] = [base[j], base[i]];
+  }
+  // applica a tutti i cubi: prendi un numero dalla permutazione in ciclo
+  let p = 0;
+  for(const c of cubes){
+    const num = base[p++ % 15];
+    setCubeNumber(c, num);
+  }
+  // (qui potresti ricalcolare punteggi/regole, se implementate)
+  renderOnce();
+}
+
+function setCubeNumber(cube, num){
+  cube.n = num;
+  const colorHex = BASE_COLORS[(num-1) % BASE_COLORS.length];
+  cube.colorHex = colorHex;
+
+  // il gruppo ha 2 figli: [0] plastica, [1] sticker numerati
+  const stickerMesh = cube.mesh.children[1];
+  const mats = matsFor(num, colorHex);
+  stickerMesh.material = mats;
+}
+
+$('#btn-reset')?.addEventListener('click', resetView);
+$('#btn-shuffle')?.addEventListener('click', shuffleAll);
+
+/* =======================
+   Avvio
+   ======================= */
 buildScene();
-repaint();
+resetView();
 
-(function loop(){ renderer.render(scene,camera); requestAnimationFrame(loop); })();
+// loop
+(function animate(){
+  renderer.render(scene,camera);
+  requestAnimationFrame(animate);
+})();
 
-})(); 
+})();
