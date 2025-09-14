@@ -1,23 +1,22 @@
 (()=>{'use strict';
 
-// ------------------ Parametri scena
+// ---------- scena base ----------
 const stage = document.getElementById('stage');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xffffff);
 
-const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
-camera.position.set(16, 22, 38);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 1000);
+camera.position.set(24, 26, 42);
 camera.lookAt(0, 0, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias:true });
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
 renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
 renderer.setSize(stage.clientWidth, stage.clientHeight);
 stage.appendChild(renderer.domElement);
 
-// luci leggere (i numeri sono MeshBasicMaterial: non subiscono luci)
-scene.add(new THREE.AmbientLight(0xffffff, .8));
-const dir = new THREE.DirectionalLight(0xffffff, .4);
-dir.position.set(8,10,12); scene.add(dir);
+// luci morbide (i numeri sono BasicMaterial -> non influenzati dalle luci)
+scene.add(new THREE.AmbientLight(0xffffff, .9));
+const key = new THREE.DirectionalLight(0xffffff, .4);
+key.position.set(15, 25, 20); scene.add(key);
 
 // resize
 function onResize(){
@@ -27,237 +26,271 @@ function onResize(){
 }
 addEventListener('resize', onResize, {passive:true}); onResize();
 
-// ------------------ Geometria piramide
-const LAYERS = [5,4,3,2,1];          // 5×5 → 1×1
-const STEP = 1.6;                     // passo X/Z
-const GAP  = 0.06;                    // separazione
-const SIZE = STEP - GAP;              // cubo bianco
-const GEO  = new THREE.BoxGeometry(SIZE, SIZE, SIZE);
+// ---------- parametri piramide ----------
+const LAYERS = [5,4,3,2,1];         // 5×5 → 1×1
+const STEP = 2.2;                    // passo griglia
+const GEO  = new THREE.BoxGeometry(2.0, 2.0, 2.0);
+const ROOT = new THREE.Group(); scene.add(ROOT);
 
-// materiale bianco
-const WHITE = new THREE.MeshStandardMaterial({ color:0xffffff, metalness:0, roughness:.8 });
+// stato numeri:
+// topRow[0..4] = numeri inseriti nella fila frontale (colonne 0..4). 0 = vuoto
+const topRow = [0,0,0,0,0];
+// fullValues[layer][i][j] = valore mostrato sul cubo (0 = vuoto)
+const fullValues = LAYERS.map(N => Array.from({length:N},()=>Array(N).fill(0)));
 
-// crea contorno nero (Edges)
+// ---------- util ----------
+function posFor(layer,i,j){
+  // base (layer=0) è in alto; scende verso il basso
+  const N = LAYERS[layer];
+  const x = (i - (N-1)/2) * STEP;
+  const z = (j - (N-1)/2) * STEP;
+  const y = - layer * STEP;
+  return new THREE.Vector3(x,y,z);
+}
+
+// Canvas con numero (nero) e fondo bianco
+function makeNumberCanvas(n, color='#000'){
+  const c=document.createElement('canvas'); c.width=c.height=256;
+  const g=c.getContext('2d');
+  g.fillStyle='#fff'; g.fillRect(0,0,256,256);
+  g.fillStyle=color;
+  g.textAlign='center'; g.textBaseline='middle';
+  g.font='bold 180px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
+  g.fillText(String(n),128,138);
+  return c;
+}
+function makeNumberTexture(n, color='#000'){
+  const tx = new THREE.CanvasTexture(makeNumberCanvas(n, color));
+  tx.anisotropy = 4; tx.needsUpdate = true;
+  return tx;
+}
+
+// material bianco (Base), numeri neri su 6 facce
+function matsFor(value, highlighted=false){
+  const base = new THREE.MeshBasicMaterial({ color: highlighted ? 0xff5555 : 0xffffff });
+  if(!value){
+    // cubo vuoto ma SEMPRE bianco
+    return [base,base,base,base,base,base];
+  }
+  const t = makeNumberTexture(value, highlighted?'#fff':'#000');
+  // tutte le facce con la stessa texture
+  const numbered = new THREE.MeshBasicMaterial({ map:t, color: highlighted?0xff5555:0xffffff });
+  return [numbered, numbered, numbered, numbered, numbered, numbered];
+}
+
+// bordo nero
 function addEdges(mesh){
-  const eg = new THREE.EdgesGeometry(mesh.geometry);
-  const ln = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color:0x111111, linewidth:1 }));
-  ln.renderOrder = 3;
-  mesh.add(ln);
+  const egeo = new THREE.EdgesGeometry(mesh.geometry);
+  const eln = new THREE.LineBasicMaterial({ color: 0x111111, linewidth: 1 });
+  const lines = new THREE.LineSegments(egeo, eln);
+  mesh.add(lines);
+  return lines;
 }
 
-// texture numero (nero o rosso)
-function numberTexture(num, color='#111', bg='#fff'){
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d');
-  g.fillStyle = bg; g.fillRect(0,0,256,256);
-  g.fillStyle = color;
-  g.font = 'bold 160px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(String(num), 128, 140);
-  const t = new THREE.CanvasTexture(c);
-  t.anisotropy = 4; t.needsUpdate = true;
-  return t;
-}
+// ---------- costruzione piramide ----------
+const cubes = []; // {mesh, layer,i,j}
 
-// crea 6 materiali identici (numero su tutte le facce)
-function matsFor(num, red=false){
-  const tex = numberTexture(num, red ? '#d10000' : '#111', '#fff');
-  const mb = new THREE.MeshBasicMaterial({ map: tex }); // Basic -> invariante alla luce
-  return [mb,mb,mb,mb,mb,mb];
-}
-
-// util per centrare i layer
-function centerCoord(n){ return (i)=> (i - (n-1)/2) * STEP; }
-
-// ------------------ Strutture dati
-// cubes[layer][i][j] -> { mesh, front:boolean, colIndex:number }
-const cubes = [];
-// mapping dei 15 "slot frontali" (5+4+3+2+1) -> { layer, i, j(=0), behind: [ {layer,i,j}... ] }
-const slots = [];
-
-// costruzione piramide
 function buildPyramid(){
   // pulizia
-  while(scene.children.length>0){ const o=scene.children.pop(); if(o.isLight) continue; }
-  scene.add(dir, ...[...scene.children].filter(o=>o.isLight)); // (ri-aggiunte luci da prima)
-  cubes.length = 0; slots.length = 0;
+  while(ROOT.children.length) ROOT.remove(ROOT.children[0]);
+  cubes.length = 0;
 
-  const root = new THREE.Group(); scene.add(root);
-
-  let slotId = 0;
+  // costruisci tutti i livelli
   for(let l=0; l<LAYERS.length; l++){
     const N = LAYERS[l];
-    const cx = centerCoord(N), cz = centerCoord(N);
-    const layer = [];
     for(let i=0;i<N;i++){
-      const row = [];
       for(let j=0;j<N;j++){
-        const mesh = new THREE.Mesh(GEO, WHITE.clone());
-        mesh.position.set(cx(i), -l*STEP, cz(j));
-        addEdges(mesh);
-        root.add(mesh);
-        row.push({ mesh, front: j===0, colIndex: -1, layer:l, i, j, value: null, red:false });
+        const m = new THREE.Mesh(GEO, matsFor(0,false));
+        m.position.copy(posFor(l,i,j));
+        m.userData = { layer:l, i, j };
+        addEdges(m);
+        ROOT.add(m);
+        cubes.push({ mesh:m, layer:l, i, j });
       }
-      layer.push(row);
     }
-    cubes.push(layer);
+  }
+}
+buildPyramid();
 
-    // crea slot per la fila frontale (j===0) di questo layer
-    for(let i=0;i<N;i++){
-      const behind = [];
-      for(let jj=0;jj<N;jj++){            // stessa colonna (stesso i), tutti i j (dietro)
-        behind.push({ layer:l, i, j:jj });
-        cubes[l][i][jj].colIndex = slotId;
-      }
-      slots.push({ layer:l, i, j:0, behind, value:null });
-      slotId++;
+// ---------- logica gioco ----------
+
+// 1) replica sulla base: lo stesso valore della colonna frontale (j=0) si copia su tutta la colonna j=0..N-1
+function repaintBaseFromTopRow(){
+  // azzera tutto
+  for(let l=0;l<LAYERS.length;l++){
+    const N=LAYERS[l];
+    for(let i=0;i<N;i++) for(let j=0;j<N;j++) fullValues[l][i][j]=0;
+  }
+  // base layer = 0
+  const N0 = LAYERS[0]; // 5
+  for(let i=0;i<N0;i++){
+    const v = topRow[i]||0;
+    for(let j=0;j<N0;j++){
+      fullValues[0][i][j] = v;
     }
   }
 }
 
-// ------------------ Interazione / palette
-const paletteDiv = document.getElementById('palette');
-let currentNumber = 1;
+// 2) differenze in cascata (assolute) dai valori del layer precedente, SOLO lungo j=0 (fronte) per costruire la piramide: ogni riga sotto dipende dalla riga sopra *sulla colonna frontale*, poi copiamo quel valore su tutta la riga del layer corrispondente per mantenere la “fascia” uniforme visivamente
+function computeDifferences(){
+  // se manca un numero nella topRow, non propaghiamo
+  if(topRow.some(v=>!v)) return;
+
+  // front-row del layer 0 (j=0)
+  // layer 1 (4 elementi) = |a-b| delle coppie adiacenti della front-row di layer 0
+  // poi layer 2,3,4 analogamente
+  let row = topRow.slice(); // length=5
+
+  for(let l=1; l<LAYERS.length; l++){
+    const next = [];
+    for(let k=0;k<row.length-1;k++){
+      next.push( Math.abs(row[k] - row[k+1]) );
+    }
+    // scrivi questi valori nel layer l, su tutti i cubi della riga (i = 0..N-1) e TUTTE le colonne (j=0..N-1) per “fascia” uniforme
+    const N = LAYERS[l];
+    for(let i=0;i<N;i++){
+      const v = next[i];
+      for(let j=0;j<N;j++){
+        fullValues[l][i][j] = v;
+      }
+    }
+    row = next;
+  }
+}
+
+// 3) evidenzia duplicati (in tutta la piramide, esclusi 0)
+function computeDuplicatesSet(){
+  const seen = new Map(); // value -> count
+  for(let l=0;l<LAYERS.length;l++){
+    const N=LAYERS[l];
+    for(let i=0;i<N;i++){
+      for(let j=0;j<N;j++){
+        const v = fullValues[l][i][j];
+        if(v>0){
+          seen.set(v, (seen.get(v)||0)+1);
+        }
+      }
+    }
+  }
+  const dups = new Set();
+  for(const [v,cnt] of seen){
+    if(cnt>1) dups.add(v);
+  }
+  return dups;
+}
+
+// 4) aggiorna i materiali in base a valori + duplicati
+function repaint(){
+  const duplicates = computeDuplicatesSet();
+
+  // calcolo conteggio differenze UNICHE (nel triangolo: 4+3+2+1=10 celle -> qui sono le “fasce” l=1..4, colonna frontale i=0..N-1)
+  const diffSet = new Set();
+  for(let l=1;l<LAYERS.length;l++){
+    const N=LAYERS[l];
+    for(let i=0;i<N;i++){
+      const v = fullValues[l][i][0]; // prendo la colonna frontale come “vera differenza”
+      if(v>0) diffSet.add(v);
+    }
+  }
+  document.getElementById('status').innerHTML =
+    `Differenze uniche: <b>${diffSet.size}/10</b>`;
+
+  // applica materiali
+  for(const c of cubes){
+    const v = fullValues[c.layer][c.i][c.j];
+    const highlight = (v>0 && duplicates.has(v));
+    c.mesh.material = matsFor(v, highlight);
+  }
+}
+
+// 5) set da palette
+let selectedNumber = 1;
 function buildPalette(){
-  paletteDiv.innerHTML = '';
+  const pal = document.getElementById('palette');
+  pal.innerHTML = '';
   for(let n=1;n<=15;n++){
     const el = document.createElement('div');
-    el.className = 'chip' + (n===currentNumber?' active':'');
-    el.textContent = String(n);
+    el.className = 'chip' + (n===selectedNumber?' active':'');
+    el.textContent = n;
     el.addEventListener('click', ()=>{
-      currentNumber = n;
-      [...paletteDiv.children].forEach(c=>c.classList.remove('active'));
+      selectedNumber = n;
+      [...pal.children].forEach(ch=>ch.classList.remove('active'));
       el.classList.add('active');
     });
-    paletteDiv.appendChild(el);
+    pal.appendChild(el);
   }
 }
 buildPalette();
 
-// evidenzia duplicati (front slots che condividono lo stesso numero)
-function highlightErrors(){
-  // conta i numeri assegnati (solo slot con value)
-  const counts = new Map();
-  slots.forEach(s=>{
-    if(s.value==null) return;
-    counts.set(s.value, (counts.get(s.value)||0)+1);
-  });
-
-  // applica colorazione rossa ai duplicati
-  slots.forEach(s=>{
-    const dup = s.value!=null && counts.get(s.value)>1;
-    s.behind.forEach(({layer,i,j})=>{
-      const cell = cubes[layer][i][j];
-      if(cell.value!=null){
-        cell.mesh.material = matsFor(cell.value, dup);   // rosso se duplicato
-        cell.red = dup;
-      }
-    });
-  });
-}
-
-// assegna valore a uno slot (propaga a tutti i "dietro")
-function setValueAtSlot(slotIndex, num){
-  const s = slots[slotIndex];
-  s.value = num;
-  s.behind.forEach(({layer,i,j})=>{
-    const cell = cubes[layer][i][j];
-    cell.value = num;
-    cell.mesh.material = matsFor(num, false);
-  });
-  highlightErrors();
-  repaint();
-}
-
-// hit-test -> restituisce lo slot frontale più vicino alla colonna cliccata
+// 6) picking: consento click SOLO su layer=0 e j=0 (fila frontale). Metto il numero scelto in topRow[i].
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 function pickFrontSlot(clientX, clientY){
   const r = renderer.domElement.getBoundingClientRect();
   ndc.x = ((clientX - r.left)/r.width)*2 - 1;
   ndc.y = -((clientY - r.top)/r.height)*2 + 1;
   ray.setFromCamera(ndc, camera);
-
-  // Intersechiamo tutti i cubi ma risaliamo al “cell”
-  const hits = ray.intersectObjects(scene.children, true);
+  const hits = ray.intersectObjects(ROOT.children, true);
   for(const h of hits){
     let o = h.object;
-    // trova l’oggetto “mesh” che abbiamo creato (ha .userData.non usata qui)
-    while(o && !o.geometry && o.parent) o = o.parent;
+    while(o && o.parent && o.parent!==ROOT) o=o.parent;
     if(!o) continue;
-
-    // trova cell corrispondente
-    for(let l=0;l<cubes.length;l++){
-      const N = LAYERS[l];
-      for(let i=0;i<N;i++){
-        for(let j=0;j<N;j++){
-          const cell = cubes[l][i][j];
-          if(cell.mesh===o){
-            // mappiamo sempre alla colonna dello stesso i nel medesimo layer
-            return cell.colIndex; // è stato assegnato in buildPyramid()
-          }
-        }
-      }
+    const ud = o.userData;
+    if(ud && ud.layer===0 && ud.j===0){ // SOLO fila frontale
+      return ud.i; // colonna 0..4
     }
   }
-  return null;
+  return -1;
 }
 
-// eventi: click -> assegna numero allo slot
-renderer.domElement.addEventListener('pointerdown', (e)=>{
-  // drag orbit? solo se fondo
-  const slot = pickFrontSlot(e.clientX, e.clientY);
-  if(slot!=null){
-    setValueAtSlot(slot, currentNumber);
-  }else{
-    isDragging = true; px = e.clientX; py = e.clientY;
-  }
-});
+renderer.domElement.addEventListener('pointerdown', onPointerDown, {passive:false});
+let isDragging=false,lastX=0,lastY=0;
+function onPointerDown(e){
+  e.preventDefault();
+  lastX=e.clientX; lastY=e.clientY;
+  isDragging=true;
 
-// orbit semplice sullo sfondo (touch-friendly)
-let isDragging=false, px=0, py=0;
-addEventListener('pointermove', (e)=>{
+  const i = pickFrontSlot(e.clientX, e.clientY);
+  if(i>=0){
+    topRow[i] = selectedNumber;      // assegna
+    repaintBaseFromTopRow();         // replica fasce sulla base
+    computeDifferences();            // calcola piramide
+    repaint();                       // ridisegna + duplicati
+  }
+}
+addEventListener('pointermove',(e)=>{
   if(!isDragging) return;
-  const dx = (e.clientX - px)/140, dy = (e.clientY - py)/140;
-  scene.rotation.y += dx;
-  scene.rotation.x += dy;
-  px = e.clientX; py = e.clientY;
+  const dx=(e.clientX-lastX)/140, dy=(e.clientY-lastY)/140;
+  ROOT.rotation.y+=dx; ROOT.rotation.x+=dy;
+  lastX=e.clientX; lastY=e.clientY;
 });
-addEventListener('pointerup', ()=> isDragging=false);
+addEventListener('pointerup',()=>{ isDragging=false; });
 
-// ------------------ UI tasti
+// Buttons
 document.getElementById('btn-reset').addEventListener('click', ()=>{
-  slots.forEach(s=>s.value=null);
-  for(let l=0;l<cubes.length;l++){
-    const N = LAYERS[l];
-    for(let i=0;i<N;i++){
-      for(let j=0;j<N;j++){
-        const cell = cubes[l][i][j];
-        cell.value=null; cell.red=false;
-        cell.mesh.material = WHITE.clone();
-      }
-    }
-  }
-  highlightErrors();
+  for(let k=0;k<5;k++) topRow[k]=0;
+  repaintBaseFromTopRow();
+  computeDifferences();
+  repaint();
+});
+document.getElementById('btn-shuffle').addEventListener('click', ()=>{
+  // mescola 5 numeri distinti 1..15
+  const pool = Array.from({length:15},(_,i)=>i+1);
+  for(let i=pool.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]]; }
+  const five = pool.slice(0,5);
+  for(let i=0;i<5;i++) topRow[i]=five[i];
+  repaintBaseFromTopRow();
+  computeDifferences();
   repaint();
 });
 
-document.getElementById('btn-shuffle').addEventListener('click', ()=>{
-  // solo i 5 slot del primo layer (base 5×5, frontali)
-  const baseSlots = slots.slice(0,5);
-  const nums = [1,2,3,4,5].sort(()=>Math.random()-.5);
-  baseSlots.forEach((s,idx)=> setValueAtSlot(s.layer*0 + s.colIndex, nums[idx])); // colIndex già consecutivi
-});
-
-// ------------------ Pseudo “Differenze uniche” (placeholder 0/10 per ora)
-const statusEl = document.getElementById('status');
-function repaint(){ statusEl.innerHTML = 'Differenze uniche: <b>0/10</b>'; }
-
-// ------------------ Avvio
-buildPyramid();
+// ---------- primo render ----------
+repaintBaseFromTopRow();
+computeDifferences();
 repaint();
 
-// render-loop
-(function loop(){ renderer.render(scene,camera); requestAnimationFrame(loop); })();
-
+(function loop(){
+  renderer.render(scene,camera);
+  requestAnimationFrame(loop);
 })();
+
+})(); 
