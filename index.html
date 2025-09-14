@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Piramide Matematica 1–15</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>🧩 Piramide Matematica</h1>
+    <div class="actions">
+      <button id="btn-shuffle" title="Mescola">Mescola</button>
+      <button id="btn-reset" title="Ordina">Ordina</button>
+      <span class="sep"></span>
+      <span id="moves" aria-live="polite">Mosse: 0</span>
+      <span id="timer">00:00</span>
+    </div>
+  </header>
+
+  <main>
+    <div id="pyramid" class="pyramid" aria-label="Piramide 1-15, punta in giù" role="group"></div>
+    <div id="msg" class="msg" aria-live="polite" role="status"></div>
+  </main>
+
+  <footer>
+    Tocca due celle per scambiarle, oppure trascinale. Obiettivo: ordinare da 1 a 15 nella piramide rovesciata.
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
