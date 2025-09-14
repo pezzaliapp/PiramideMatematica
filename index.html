@@ -1,41 +1,27 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="UTF-8">
   <title>Piramide Matematica 3D</title>
-  <meta name="description" content="Piramide matematica 3D: base 5 in alto, differenze uniche.">
-  <meta name="theme-color" content="#0b5fff">
-  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { margin:0; background:#1e2430; color:#fff; font-family:sans-serif; }
+    #stage { width:100vw; height:100vh; display:block; }
+    .ui {
+      position:absolute; top:10px; left:0; right:0;
+      display:flex; justify-content:center; gap:10px;
+    }
+    button { padding:6px 14px; border:none; border-radius:6px; background:#1976d2; color:#fff; font-size:14px; cursor:pointer; }
+    #status { position:absolute; top:50px; left:0; right:0; text-align:center; font-size:16px; }
+  </style>
 </head>
 <body>
   <div class="ui">
-    <header class="bar">
-      <h1>🧩 Piramide Matematica 3D</h1>
-      <div class="actions">
-        <button id="btn-shuffle" title="Mescola top">Mescola 5</button>
-        <button id="btn-reset" title="Reset">Reset</button>
-        <button id="btn-help" title="Regole">?</button>
-        <span class="sep"></span>
-        <span id="status" class="status">Differenze uniche: <b>0/10</b></span>
-      </div>
-    </header>
-    <div id="stage" class="stage" aria-label="Piramide matematica 3D"></div>
-    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <button onclick="scramble()">Mescola 5</button>
+    <button onclick="resetPyramid()">Reset</button>
   </div>
-
+  <div id="status">Differenze uniche: 0/10</div>
+  <div id="stage"></div>
   <script src="three.js"></script>
   <script src="pyramid.js"></script>
-
-  <script src="upup.min.js"></script>
-  <script>
-  if (typeof UpUp !== "undefined") {
-    UpUp.start({
-      'cache-version': 'pm3d-1.1.0',
-      'content-url': 'index.html',
-      'assets': ['styles.css','three.js','pyramid.js']
-    });
-  }
-  </script>
 </body>
 </html>
