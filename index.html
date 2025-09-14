@@ -1,15 +1,15 @@
 <!doctype html>
 <html lang="it">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>La Piramide Matematica — 15 numeri</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>La Piramide Matematica 3D</title>
   <style>
-    :root { --brand:#0b5fff; --ink:#0b5fff; --bg:#ffffff; --text:#0a0f1a; }
+    :root{--brand:#0b5fff;--ink:#0b5fff;--bg:#ffffff;--text:#0a0f1a}
     html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
     .bar{
-      position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;
+      position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;
       padding:10px 14px;background:var(--brand);color:#fff;flex-wrap:wrap
     }
     .bar h1{margin:0;font-size:16px;font-weight:800}
@@ -26,25 +26,22 @@
       font-weight:800;cursor:pointer;user-select:none
     }
     .status{font-weight:800}
-    #stage{height:calc(100vh - 104px);touch-action:none; /* serve su iOS */}
+    #stage{height:calc(100vh - 114px);touch-action:none;}
   </style>
 </head>
 <body>
-
   <div class="bar">
     <div>
       <h1>La Piramide Matematica</h1>
-      <div class="sub">Doppi clic per iniziare. Tocca un numero 1–15, poi tocca un cubo della riga base (5 cubi). Trascina sullo sfondo per ruotare.</div>
+      <div class="sub">Doppi clic per iniziare. Seleziona un numero 1–15 e tocca un cubo della <b>fila frontale</b> in alto (5 cubi). Trascina sullo sfondo per ruotare.</div>
     </div>
-
     <div class="row" id="palette"></div>
-
     <button class="btn" id="btn-scramble">Mescola 5</button>
     <button class="btn" id="btn-reset">Reset</button>
     <div class="status" id="status">Differenze uniche: <b>0/10</b></div>
   </div>
 
-  <div id="stage" aria-label="Piramide matematica 3D"></div>
+  <div id="stage" aria-label="Piramide 3D 5×5→1×1"></div>
 
   <script src="three.js"></script>
   <script src="pyramid.js"></script>
