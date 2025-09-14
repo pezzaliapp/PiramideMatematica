@@ -1,0 +1,8 @@
+{
+  "name": "piramide-matematica-3d",
+  "version": "1.0.0",
+  "description": "Piramide Matematica 3D con Three.js: 5 numeri (1\u201315), differenze uniche.",
+  "scripts": {
+    "serve": "npx http-server -c-1"
+  }
+}
