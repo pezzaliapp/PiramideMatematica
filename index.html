@@ -5,40 +5,30 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>La Piramide Matematica 3D</title>
   <style>
-    :root{--brand:#0b5fff;--ink:#0b5fff;--bg:#ffffff;--text:#0a0a0a}
+    :root{--brand:#0b5fff;--ink:#111;--bg:#ffffff;--text:#0a0f1a}
     html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-
     .bar{
       position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;
       padding:10px 14px;background:var(--brand);color:#fff;flex-wrap:wrap
     }
     .bar h1{margin:0;font-size:16px;font-weight:800}
-    .sub{font-size:13px;opacity:.9}
     .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-
     .chip{min-width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;
-      padding:0 8px;border-radius:999px;border:2px solid #fff;background:#fff;color:var(--ink);
-      font-weight:800;cursor:pointer;user-select:none}
-    .chip.active{outline:3px solid rgba(11,95,255,.35)}
-
-    .btn{border:0;border-radius:10px;padding:8px 12px;background:#fff;color:var(--ink);
-      font-weight:800;cursor:pointer;user-select:none}
+      border-radius:999px;border:2px solid #fff;background:#fff;color:var(--ink);font-weight:800;cursor:pointer;user-select:none}
+    .chip.active{box-shadow:0 0 0 3px rgba(11,95,255,.25)}
+    .btn{border:0;border-radius:10px;padding:8px 12px;background:#fff;color:var(--ink);font-weight:800;cursor:pointer}
     .status{font-weight:800}
-
-    #stage{height:calc(100vh - 120px);touch-action:none}
+    #stage{height:calc(100vh - 114px);touch-action:none;}
+    .hint{font-size:12px;opacity:.9}
   </style>
 </head>
 <body>
   <div class="bar">
     <div>
       <h1>La Piramide Matematica</h1>
-      <div class="sub">
-        Seleziona un numero 1–15, poi tocca un cubo della <b>fila frontale</b> in alto (5 cubi).
-        Trascina sullo sfondo per ruotare.
-      </div>
+      <div class="hint">Seleziona un numero 1–15, poi tocca un cubo della <b>fila frontale</b> in alto (5 cubi). Trascina sullo sfondo per ruotare.</div>
     </div>
-
     <div class="row" id="palette"></div>
     <button class="btn" id="btn-shuffle">Mescola 5</button>
     <button class="btn" id="btn-reset">Reset</button>
