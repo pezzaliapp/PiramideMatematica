@@ -11,8 +11,9 @@
     .bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:10px;
       padding:10px 14px;background:var(--blue);color:#fff}
     .bar h1{margin:0;font-size:16px;margin-right:auto}
-    .bar button{border:0;border-radius:10px;padding:8px 12px;background:#fff;
+    .bar button, .bar select{border:0;border-radius:10px;padding:8px 12px;background:#fff;
       color:var(--blue);font-weight:700;cursor:pointer;touch-action:manipulation}
+    .bar select{appearance:none}
     .status{font-weight:700}
     #palette{display:flex;flex-wrap:wrap;gap:6px;align-items:center;
       padding:10px 14px;border-bottom:1px solid #e6e6e6;background:#fafafa}
@@ -20,21 +21,28 @@
       align-items:center;justify-content:center;font-weight:700;cursor:pointer;
       user-select:none;border:1px solid #ddd;box-shadow:0 1px 0 #eee}
     #palette .active{outline:2px solid var(--blue)}
-    #stage{height:calc(100vh - 54px - 64px); /* bar + palette */}
+    #stage{height:calc(100vh - 54px - 64px);} /* bar + palette */
+    /* Nascondo la palette quando sono in vista “Strati” */
+    .hidePalette #palette{display:none}
+    .hidePalette #stage{height:calc(100vh - 54px);}
   </style>
 </head>
 <body>
   <div class="bar">
     <h1>La Piramide Matematica</h1>
+    <select id="view">
+      <option value="math">Matematica</option>
+      <option value="layers">Strati 5×5→1</option>
+    </select>
     <button id="btn-shuffle">Mescola 5</button>
     <button id="btn-reset">Reset</button>
     <span class="status">Differenze uniche: <b id="status">0/10</b></span>
   </div>
 
-  <!-- paletta numeri 1..15 -->
+  <!-- paletta numeri 1..15 (solo in vista Matematica) -->
   <div id="palette" aria-label="Numeri disponibili (1–15)"></div>
 
-  <div id="stage" aria-label="Piramide di cubi 3D"></div>
+  <div id="stage" aria-label="Piramide 3D"></div>
 
   <script src="three.js"></script>
   <script src="pyramid.js"></script>
