@@ -2,35 +2,40 @@
 <html lang="it">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>La Piramide Matematica 3D</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>La Piramide Matematica — 15 numeri</title>
   <style>
-    html,body{height:100%;margin:0;background:#fff;color:#111;
+    :root { --blue:#0b5fff; --bg:#ffffff; --text:#0b0f19; }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    .bar{
-      position:sticky;top:0;display:flex;gap:10px;align-items:center;
-      padding:10px 14px;background:#0b5fff;color:#fff;z-index:2
-    }
-    .bar h1{margin:0;font-size:1rem;margin-right:auto}
-    .bar button{
-      border:0;border-radius:10px;padding:8px 12px;background:#fff;
-      color:#0b5fff;font-weight:700;cursor:pointer;touch-action:manipulation
-    }
-    .bar .status{margin-left:8px;font-weight:700}
-    #stage{height:calc(100vh - 54px)}
-    .banner{position:absolute;top:60px;left:50%;transform:translateX(-50%);
-      font-size:1.2rem;font-weight:700;color:#333;pointer-events:none}
+    .bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:10px;
+      padding:10px 14px;background:var(--blue);color:#fff}
+    .bar h1{margin:0;font-size:16px;margin-right:auto}
+    .bar button{border:0;border-radius:10px;padding:8px 12px;background:#fff;
+      color:var(--blue);font-weight:700;cursor:pointer;touch-action:manipulation}
+    .status{font-weight:700}
+    #palette{display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+      padding:10px 14px;border-bottom:1px solid #e6e6e6;background:#fafafa}
+    #palette .pill{min-width:34px;height:34px;border-radius:8px;display:flex;
+      align-items:center;justify-content:center;font-weight:700;cursor:pointer;
+      user-select:none;border:1px solid #ddd;box-shadow:0 1px 0 #eee}
+    #palette .active{outline:2px solid var(--blue)}
+    #stage{height:calc(100vh - 54px - 64px); /* bar + palette */}
   </style>
 </head>
 <body>
   <div class="bar">
-    <h1>🧩 La Piramide Matematica 3D (5,4,3,2,1)</h1>
+    <h1>La Piramide Matematica</h1>
     <button id="btn-shuffle">Mescola 5</button>
     <button id="btn-reset">Reset</button>
-    <span class="status" id="status">Differenze uniche: <b>0/10</b></span>
+    <span class="status">Differenze uniche: <b id="status">0/10</b></span>
   </div>
+
+  <!-- paletta numeri 1..15 -->
+  <div id="palette" aria-label="Numeri disponibili (1–15)"></div>
+
   <div id="stage" aria-label="Piramide di cubi 3D"></div>
-  <div class="banner">👉 Doppio clic per iniziare</div>
+
   <script src="three.js"></script>
   <script src="pyramid.js"></script>
 </body>
