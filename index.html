@@ -3,22 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Piramide di Cubi 5×5→1</title>
+  <title>Piramide Matematica 3D — 15 numeri</title>
   <style>
     html,body{height:100%;margin:0;background:#1f2430;color:#e8eefc;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-    .bar{position:sticky;top:0;display:flex;gap:10px;align-items:center;padding:10px 14px;background:#0b5fff;color:#fff;z-index:2}
+    .bar{
+      position:sticky;top:0;display:flex;gap:10px;align-items:center;
+      padding:10px 14px;background:#0b5fff;color:#fff;z-index:2
+    }
     .bar h1{margin:0;font-size:1rem;margin-right:auto}
-    .bar button{border:0;border-radius:10px;padding:8px 12px;background:#fff;color:#0b5fff;font-weight:700;cursor:pointer;touch-action:manipulation}
+    .bar button{
+      border:0;border-radius:10px;padding:8px 12px;background:#fff;
+      color:#0b5fff;font-weight:700;cursor:pointer;touch-action:manipulation
+    }
+    .bar .status{margin-left:8px;font-weight:700}
     #stage{height:calc(100vh - 54px)}
   </style>
 </head>
 <body>
   <div class="bar">
-    <h1>🧩 Piramide di Cubi (5×5,4×4,3×3,2×2,1×1)</h1>
-    <button id="reset">Reset</button>
+    <h1>🧩 Piramide Matematica 3D (5,4,3,2,1)</h1>
+    <button id="btn-shuffle">Mescola 5</button>
+    <button id="btn-reset">Reset</button>
+    <span class="status" id="status">Differenze uniche: <b>0/10</b></span>
   </div>
+
   <div id="stage" aria-label="Piramide di cubi 3D"></div>
+
   <script src="three.js"></script>
-  <script src="pyramid_grid.js"></script>
+  <script src="pyramid.js"></script>
 </body>
 </html>
