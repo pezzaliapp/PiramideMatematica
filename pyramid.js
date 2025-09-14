@@ -1,65 +1,44 @@
 (()=>{'use strict';
-/**
- * Piramide Matematica 3D (15 numeri).
- * - Row schema: [5,4,3,2,1].
- * - Top (5 cubi) interattivo: swap a coppie.
- * - Sotto: differenze assolute auto-calcolate.
- * - Regola: le 10 differenze devono essere tutte diverse → duplicati evidenziati in rosso.
- * - Camera fit + resize robusto.
- */
 
+/* ---------- setup base ---------- */
 const stage = document.getElementById('stage');
+if(!stage){ console.error('#stage mancante'); return; }
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1f2430);
 
-// Camera
 const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
 camera.position.set(0, 12, 26);
 camera.lookAt(0,0,0);
 
-// Renderer
 const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
 renderer.setSize(stage.clientWidth, stage.clientHeight);
 stage.appendChild(renderer.domElement);
 
-// Luci
+// luci
 scene.add(new THREE.AmbientLight(0xffffff, .95));
 const dir = new THREE.DirectionalLight(0xffffff, .35);
 dir.position.set(6,12,10);
 scene.add(dir);
 
-// UI (opzionale)
-const $ = sel => document.querySelector(sel);
+// util UI
+const $ = s => document.querySelector(s);
 const statusEl = $('#status');
-function setStatus(ok){ if(statusEl) statusEl.innerHTML = `Differenze uniche: <b>${ok}/10</b>`; }
+const setStatus = n => { if(statusEl) statusEl.innerHTML = `Differenze uniche: <b>${n}/10</b>`; };
 
-// Resize + fit
-function onResize(){
-  const w=stage.clientWidth, h=stage.clientHeight;
-  camera.aspect=w/h; camera.updateProjectionMatrix();
-  renderer.setSize(w,h);
-  if (cubes.length) fitCameraToPyramid();
-  renderer.render(scene,camera);
-}
-addEventListener('resize', onResize, {passive:true});
-
-// ---- Parametri piramide (15 cubi)
+// dimensioni
 const ROWS = [5,4,3,2,1];
 const STEP_X = 2.1, STEP_Y = 2.2, STEP_Z = 1.2;
 const CUBE   = 2.08;
 const GEO    = new THREE.BoxGeometry(CUBE,CUBE,CUBE);
 const FACE_BG = '#1b2538';
 
-// Palette (per differenziare i cubi visivamente)
+// colori diversi per cubo
 function hsvToRgb(h, s, v){ let f=(n,k=(n+h*6)%6)=>v-v*s*Math.max(Math.min(k,4-k,1),0); return [f(5),f(3),f(1)].map(x=>Math.round(x*255)); }
 const COLORS = Array.from({length:15},(_,i)=>{ const h=i/15,s=0.6,v=0.95; const [r,g,b]=hsvToRgb(h,s,v); return (r<<16)|(g<<8)|(b); });
 
-// Stato
-const cubes=[]; // {mesh,row,col,value,mats}
-let selected=null; // mesh selezionato sul top
-
-// Testo (stesso numero su TUTTE le 6 facce)
+/* ---------- numeri su facce ---------- */
 function makeNumberTexture(num, fg='#fff', bg=FACE_BG){
   const c=document.createElement('canvas'); c.width=c.height=256;
   const g=c.getContext('2d');
@@ -69,15 +48,13 @@ function makeNumberTexture(num, fg='#fff', bg=FACE_BG){
   if(num!=='' && num!=null) g.fillText(num,128,142);
   const tx=new THREE.CanvasTexture(c); tx.anisotropy=4; tx.needsUpdate=true; return tx;
 }
-
-// 6 materiali identici (numero su tutte le facce)
-function buildMaterials(colorHex, num){
-  const tx = makeNumberTexture(num,'#fff',FACE_BG);
-  const side = new THREE.MeshLambertMaterial({color:colorHex, map:tx});
-  return [side.clone(),side.clone(),side.clone(),side.clone(),side.clone(),side.clone()];
+function matsFor(value, colorHex){
+  const tx = makeNumberTexture(value,'#fff',FACE_BG);
+  const m  = new THREE.MeshLambertMaterial({color:colorHex, map:tx});
+  return [m.clone(),m.clone(),m.clone(),m.clone(),m.clone(),m.clone()];
 }
 
-// Posizioni centrate (piramide con “profondità” su Z)
+/* ---------- posizione centrata ---------- */
 function positionFor(row,col){
   const n = ROWS[row];
   const x = (col - (n-1)/2) * STEP_X;
@@ -85,36 +62,40 @@ function positionFor(row,col){
   const z = (row - (ROWS.length-1)/2) * STEP_Z;
   return new THREE.Vector3(x,y,z);
 }
+function lin(row,col){ let i=0; for(let r=0;r<row;r++) i+=ROWS[r]; return i+col; }
 
-function linearIndex(row,col){ let i=0; for(let r=0;r<row;r++) i+=ROWS[r]; return i+col; }
+/* ---------- stato ---------- */
+const cubes=[]; // {mesh,row,col,value,mats}
 
-// Costruzione
-function buildScene(){
-  // pulizia
+/* ---------- costruzione piramide ---------- */
+function build(topValues){
+  // pulizia oggetti mesh
   for(let i=scene.children.length-1;i>=0;i--){
     const o=scene.children[i]; if(o.isMesh) scene.remove(o);
   }
   cubes.length=0;
 
-  // Top casuale: 5 numeri distinti da 1..15
-  const pool = Array.from({length:15},(_,i)=>i+1);
-  for(let i=pool.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]]; }
-  const top = pool.slice(0,5);
-
-  // Calcola differenze per le righe successive
-  const valuesByRow=[top];
-  for(let r=1;r<ROWS.length;r++){
-    const above = valuesByRow[r-1], rowVals=[];
-    for(let c=0;c<above.length-1;c++) rowVals.push(Math.abs(above[c]-above[c+1]));
-    valuesByRow[r]=rowVals;
+  // se non passo top, crea 5 numeri casuali (distinti) 1..15
+  if(!topValues){
+    const pool = Array.from({length:15},(_,i)=>i+1);
+    for(let i=pool.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]]; }
+    topValues = pool.slice(0,5);
   }
 
-  // Crea 15 cubi
+  // calcola righe inferiori = differenze
+  const valuesByRow=[topValues];
+  for(let r=1;r<ROWS.length;r++){
+    const above=valuesByRow[r-1], row=[];
+    for(let c=0;c<above.length-1;c++) row.push(Math.abs(above[c]-above[c+1]));
+    valuesByRow[r]=row;
+  }
+
+  // crea 15 cubi
   let k=0;
   for(let r=0;r<ROWS.length;r++){
     for(let c=0;c<ROWS[r];c++){
       const val = valuesByRow[r][c];
-      const mats = buildMaterials(COLORS[k%COLORS.length], val);
+      const mats = matsFor(val, COLORS[k%COLORS.length]);
       const mesh = new THREE.Mesh(GEO, mats);
       mesh.position.copy(positionFor(r,c));
       mesh.userData = {row:r,col:c};
@@ -123,74 +104,76 @@ function buildScene(){
       k++;
     }
   }
-
-  fitCameraToPyramid();
-  applyAndCheck();
+  fitCamera();
+  checkUniqueness();
 }
 
-// Aggiorna numero su tutte le 6 facce
-function setCubeNumber(i,num){
-  const c=cubes[i]; c.value=num;
+/* ---------- aggiornamenti ---------- */
+function setValueAt(row,col,val){
+  const idx = lin(row,col), cube=cubes[idx];
+  cube.value = val;
   for(let f=0; f<6; f++){
-    c.mats[f].map?.dispose?.();
-    c.mats[f].map = makeNumberTexture(num,'#fff',FACE_BG);
-    c.mats[f].needsUpdate = true;
+    cube.mats[f].map?.dispose?.();
+    cube.mats[f].map = makeNumberTexture(val,'#fff',FACE_BG);
+    cube.mats[f].needsUpdate=true;
   }
-  c.mesh.material = c.mats;
+  cube.mesh.material=cube.mats;
 }
 
-// Evidenziatore
-function setHighlight(i,on){
-  const c=cubes[i]; const baseCol=COLORS[(linearIndex(c.row,c.col))%COLORS.length];
+function recomputeBelow(){
+  const top=[]; for(let c=0;c<5;c++) top.push(cubes[lin(0,c)].value);
+  const valuesByRow=[top];
+  for(let r=1;r<ROWS.length;r++){
+    const above=valuesByRow[r-1], row=[];
+    for(let c=0;c<above.length-1;c++) row.push(Math.abs(above[c]-above[c+1]));
+    valuesByRow[r]=row;
+  }
+  for(let r=1;r<ROWS.length;r++){
+    for(let c=0;c<ROWS[r];c++){
+      setValueAt(r,c, valuesByRow[r][c]);
+    }
+  }
+}
+
+function highlight(idx,on){
+  const baseCol=COLORS[idx%COLORS.length];
+  const cube=cubes[idx];
   for(let f=0; f<6; f++){
-    const m=c.mats[f];
+    const m=cube.mats[f];
     if(on){ m.color.setHex(0xc0392b); m.emissive=new THREE.Color(0x330000); m.emissiveIntensity=.7; }
     else { m.color.setHex(baseCol);   m.emissive=new THREE.Color(0x000000); m.emissiveIntensity=0; }
     m.needsUpdate=true;
   }
 }
 
-// Applica differenze e controlla unicità
-function applyAndCheck(){
-  // Top corrente
-  const top = []; for(let c=0;c<5;c++) top.push(cubes[linearIndex(0,c)].value);
-
-  // Ricalcola sotto
-  const valuesByRow=[top];
-  for(let r=1;r<ROWS.length;r++){
-    const above=valuesByRow[r-1], rowVals=[];
-    for(let c=0;c<above.length-1;c++) rowVals.push(Math.abs(above[c]-above[c+1]));
-    valuesByRow[r]=rowVals;
-  }
-
-  // Aggiorna cubi + clear highlight
-  for(let i=0;i<cubes.length;i++) setHighlight(i,false);
-  for(let r=0;r<ROWS.length;r++){
-    for(let c=0;c<ROWS[r];c++){
-      const idx = linearIndex(r,c);
-      setCubeNumber(idx, valuesByRow[r][c]);
-    }
-  }
-
-  // Unicità sulle 10 differenze
-  const posByDiff={};
+// controlla le 10 differenze (righe 1..4) siano tutte uniche
+function checkUniqueness(){
+  const posByVal={};
   for(let r=1;r<ROWS.length;r++){
     for(let c=0;c<ROWS[r];c++){
-      const idx=linearIndex(r,c), v=valuesByRow[r][c];
-      (posByDiff[v] ||= []).push(idx);
+      const idx=lin(r,c), v=cubes[idx].value;
+      (posByVal[v] ||= []).push(idx);
     }
   }
-  const duplicates = Object.keys(posByDiff).filter(k=>posByDiff[k].length>1);
-  duplicates.forEach(k=>posByDiff[k].forEach(i=>setHighlight(i,true)));
-  const uniqueCount = 10 - duplicates.reduce((a,k)=>a+(posByDiff[k].length-1),0);
-  setStatus(uniqueCount);
+  // clear
+  for(let i=0;i<cubes.length;i++) highlight(i,false);
+  // dup
+  let duplicates = 0;
+  for(const k in posByVal){
+    if(posByVal[k].length>1){
+      duplicates += posByVal[k].length-1;
+      posByVal[k].forEach(i=>highlight(i,true));
+    }
+  }
+  const unique = 10 - duplicates;
+  setStatus(unique);
 }
 
-// --- Picking top-only per swap ---
-const ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
-function pickTop(mx,my){
+/* ---------- interazione top (swap a coppie) ---------- */
+const ray = new THREE.Raycaster(), ndc=new THREE.Vector2();
+function pickTop(x,y){
   const r=renderer.domElement.getBoundingClientRect();
-  ndc.x=((mx-r.left)/r.width)*2-1; ndc.y= -((my-r.top)/r.height)*2+1;
+  ndc.x=((x-r.left)/r.width)*2-1; ndc.y= -((y-r.top)/r.height)*2+1;
   ray.setFromCamera(ndc,camera);
   const hits=ray.intersectObjects(scene.children,true);
   for(const h of hits){
@@ -199,66 +182,89 @@ function pickTop(mx,my){
   }
   return null;
 }
-
-function onPointerDown(e){
+let selected=null;
+function onTopPointer(e){
   const t=e.touches?e.touches[0]:e;
-  const m = pickTop(t.clientX,t.clientY);
-  if(!m) return;
-  if(selected===m){ selected=null; return; }
-  if(!selected){ selected=m; return; }
-  // swap
-  const ia = cubes.findIndex(x=>x.mesh===selected);
-  const ib = cubes.findIndex(x=>x.mesh===m);
-  const av = cubes[ia].value, bv=cubes[ib].value;
-  setCubeNumber(ia,bv); setCubeNumber(ib,av);
+  const hit=pickTop(t.clientX,t.clientY);
+  if(!hit) return;
+  if(!selected){ selected=hit; return; }
+  if(selected===hit){ selected=null; return; }
+  const ia = lin(0, selected.userData.col);
+  const ib = lin(0, hit.userData.col);
+  const av=cubes[ia].value, bv=cubes[ib].value;
+  setValueAt(0, selected.userData.col, bv);
+  setValueAt(0, hit.userData.col, av);
   selected=null;
-  applyAndCheck();
+  recomputeBelow();
+  checkUniqueness();
 }
-renderer.domElement.addEventListener('mousedown', onPointerDown, {passive:true});
-renderer.domElement.addEventListener('touchstart', onPointerDown, {passive:true});
+renderer.domElement.addEventListener('mousedown', onTopPointer, {passive:true});
+renderer.domElement.addEventListener('touchstart', onTopPointer, {passive:true});
 
-// Drag per ruotare la scena (sullo sfondo)
-let rotating=false, lx=0, ly=0;
-renderer.domElement.addEventListener('pointerdown', e=>{ if(!pickTop(e.clientX,e.clientY)) {rotating=true; lx=e.clientX; ly=e.clientY;} });
-addEventListener('pointermove', e=>{ if(!rotating) return; const dx=(e.clientX-lx)/140, dy=(e.clientY-ly)/140; scene.rotation.y+=dx; scene.rotation.x+=dy; lx=e.clientX; ly=e.clientY; });
-addEventListener('pointerup', ()=> rotating=false);
-
-// Bottoni
-$('#btn-shuffle')?.addEventListener('click', ()=>{
-  const pool = Array.from({length:15},(_,i)=>i+1);
-  for(let i=pool.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]]; }
-  const top = pool.slice(0,5);
-  for(let c=0;c<5;c++) setCubeNumber(linearIndex(0,c), top[c]);
-  applyAndCheck();
+// drag rotazione sullo sfondo
+let dragging=false, px=0, py=0;
+renderer.domElement.addEventListener('pointerdown', e=>{
+  if(!pickTop(e.clientX,e.clientY)){ dragging=true; px=e.clientX; py=e.clientY; }
 });
-
-$('#btn-reset')?.addEventListener('click', ()=>{
-  for(let c=0;c<5;c++) setCubeNumber(linearIndex(0,c), c+1);
-  applyAndCheck();
+addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  const dx=(e.clientX-px)/140, dy=(e.clientY-py)/140;
+  scene.rotation.y+=dx; scene.rotation.x+=dy;
+  px=e.clientX; py=e.clientY;
 });
+addEventListener('pointerup', ()=> dragging=false);
 
-// Fit automatico della camera alla piramide
-function fitCameraToPyramid(){
+/* ---------- camera fit + resize ---------- */
+function fitCamera(){
   const box = new THREE.Box3();
-  for(const c of cubes) box.expandByObject(c.mesh);
+  for(const o of scene.children){ if(o.isMesh) box.expandByObject(o); }
+  if(box.isEmpty()) return;
+
   const size = new THREE.Vector3(); box.getSize(size);
   const center = new THREE.Vector3(); box.getCenter(center);
 
-  const fitOffset = 1.25;
   const maxSize = Math.max(size.x,size.y,size.z);
-  const fov = camera.fov * (Math.PI/180);
+  const fov = camera.fov * Math.PI/180;
   let dist = (maxSize/2) / Math.tan(fov/2);
-  dist *= fitOffset;
+  dist *= 1.25;
 
-  const dirV = new THREE.Vector3().subVectors(camera.position, camera.lookAt || new THREE.Vector3()).normalize();
-  camera.position.copy(center.clone().add(dirV.multiplyScalar(dist)));
+  const dir = new THREE.Vector3(0,0,1); // guarda “da davanti”
+  camera.position.copy(center.clone().add(dir.multiplyScalar(dist)));
   camera.lookAt(center);
   camera.updateProjectionMatrix();
 }
 
-// Start
-buildScene();
-onResize(); // assicura il primo render corretto
+function onResize(){
+  const w=stage.clientWidth, h=stage.clientHeight;
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h);
+  renderer.render(scene,camera);
+}
+addEventListener('resize', onResize, {passive:true});
+
+/* ---------- bottoni ---------- */
+$('#btn-reset')?.addEventListener('click', ()=>{
+  const top=[1,2,3,4,5];
+  for(let c=0;c<5;c++) setValueAt(0,c, top[c]);
+  recomputeBelow();
+  checkUniqueness();
+});
+
+$('#btn-shuffle')?.addEventListener('click', ()=>{
+  const pool = Array.from({length:15},(_,i)=>i+1);
+  for(let i=pool.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]]; }
+  const top = pool.slice(0,5);
+  for(let c=0;c<5;c++) setValueAt(0,c, top[c]);
+  recomputeBelow();
+  checkUniqueness();
+});
+
+/* ---------- start ---------- */
+build();          // costruisce piramide + fit + stato
+onResize();       // primo layout certo
+
 (function loop(){ renderer.render(scene,camera); requestAnimationFrame(loop); })();
+
+console.log('Piramide3D: init ok');
 
 })();
