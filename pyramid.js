@@ -149,7 +149,8 @@ function recomputeAll(){
     }
   }
 
-  // Layer inferiori (2D): B[i,j] = max(|A[i,j]-A[i+1,j]|, |A[i,j]-A[i,j+1]|)
+  // Layer superiori: differenza assoluta orizzontale
+  // B[i,j] = |A[i,j] - A[i+1,j]|  (riduzione 5→4→3→2→1 lungo l'asse X)
   for (let L=1; L<LAYERS.length; L++){
     const N = LAYERS[L];
     const P = L-1;
@@ -157,8 +158,7 @@ function recomputeAll(){
       for (let j=0;j<N;j++){
         const a00 = getCell(P,i,j)?.value;
         const a10 = getCell(P,i+1,j)?.value;
-        const a01 = getCell(P,i,j+1)?.value;
-        const v = (a00==null||a10==null||a01==null) ? null : Math.max(Math.abs(a00-a10), Math.abs(a00-a01));
+        const v = (a00==null||a10==null) ? null : Math.abs(a00 - a10);
         setCellValue(getCell(L,i,j), v, false);
       }
     }
