@@ -1,370 +1,290 @@
-/* pyramid.js – La Piramide Matematica 3D (completo)
-   - Numeri inseribili su 5 cubi della fila frontale (layer 0, j=0)
-   - Propagazione differenze assolute sui livelli inferiori
-   - Evidenziazione rossa di duplicati e 0
-   - Numeri su TUTTE le facce, cubi bianchi con bordo nero
-*/
-
 (() => {
-  'use strict';
+'use strict';
 
-  // =================== DOM refs ===================
-  const stageEl   = document.getElementById('stage');
-  const paletteEl = document.getElementById('palette');
-  const statusEl  = document.getElementById('status');
-  const btnShuffle= document.getElementById('btn-shuffle');
-  const btnReset  = document.getElementById('btn-reset');
+/* =========================================================
+   La Piramide Matematica 3D — base 5×5 editabile (25 celle)
+   - Inserimento numeri 1..15 su QUALSIASI cella del layer 5×5
+   - Differenze 2D sui livelli inferiori:
+       B[i,j] = max(|A[i,j]-A[i+1,j]|, |A[i,j]-A[i,j+1]|)
+   - 0 vietato; duplicati nella BASE (5×5) evidenziati in rosso
+   - Numeri su 6 facce, tema KubeApp (colori da CSS vars)
+   ========================================================= */
 
-  // =================== 3D Setup ===================
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xffffff);
+/* ---------- Scene & Camera ---------- */
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(getCSS('--bg','#0c0f14'));
 
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
-  camera.position.set(0, 34, 70);
-  camera.lookAt(0, 0, 0);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
+camera.position.set(0, 30, 60);
+camera.lookAt(0,0,0);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  stageEl.appendChild(renderer.domElement);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
+renderer.setSize(stage.clientWidth, stage.clientHeight);
+stage.appendChild(renderer.domElement);
 
-  const light = new THREE.AmbientLight(0xffffff, 1);
-  scene.add(light);
+/* ---------- Luci ---------- */
+scene.add(new THREE.AmbientLight(0xffffff, .95));
+const dir = new THREE.DirectionalLight(0xffffff, .25);
+dir.position.set(20,25,12); scene.add(dir);
 
-  // Gruppo che contiene tutta la piramide (per ruotarla facilmente)
-  const root = new THREE.Group();
-  scene.add(root);
+/* ---------- Costanti piramide ---------- */
+const LAYERS = [5,4,3,2,1];
+const STEP   = 2.25;
+const STEP_Y = 2.25;
+const SIZE   = 2.20;
+const GEO    = new THREE.BoxGeometry(SIZE, SIZE, SIZE);
 
-  // Resize responsivo
-  function onResize() {
-    const w = stageEl.clientWidth;
-    const h = stageEl.clientHeight;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h, false);
+/* ---------- Stato ---------- */
+// Base 5×5 interamente editabile
+const baseValues = Array.from({length:5},()=>Array(5).fill(null));
+
+const cubes = [];  // {mesh, edges, layer, i, j, value}
+window.__allCubeMeshes = [];
+window.__edgeLines     = [];
+let selectedNumber = 1;
+
+/* ---------- Helpers CSS vars ---------- */
+function getCSS(varName, fallback){ 
+  const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  return v || fallback;
+}
+
+/* ---------- CanvasTexture per numeri su 6 facce ---------- */
+function makeNumberTexture(num, ink='#111', face='#fff'){
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = face; g.fillRect(0,0,256,256);
+  g.strokeStyle = getCSS('--edge','#000'); g.lineWidth = 8; g.strokeRect(6,6,244,244);
+  g.fillStyle = ink;
+  g.font = 'bold 160px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(num==null?'':String(num), 128, 140);
+  const tx = new THREE.CanvasTexture(c); tx.anisotropy=8; tx.needsUpdate=true; 
+  return tx;
+}
+function matsFor(num, colorOverride=null){
+  const face = colorOverride || getCSS('--cube','#fff');
+  const ink  = colorOverride ? '#fff' : getCSS('--ink','#fff');
+  const tx = makeNumberTexture(num, ink, face);
+  return new Array(6).fill(0).map(()=> new THREE.MeshBasicMaterial({map:tx, toneMapped:false}));
+}
+
+/* ---------- Posizionamento ---------- */
+function posFor(layerIdx, i, j){
+  const N = LAYERS[layerIdx];
+  const x = (i - (N-1)/2)*STEP;
+  const z = (j - (N-1)/2)*STEP;
+  const y = -layerIdx*STEP_Y;
+  return new THREE.Vector3(x,y,z);
+}
+
+/* ---------- Build piramide ---------- */
+function buildPyramid(){
+  for (const c of cubes){
+    if (c.mesh) scene.remove(c.mesh);
+    if (c.edges) scene.remove(c.edges);
   }
-  window.addEventListener('resize', onResize, { passive: true });
-  onResize();
+  cubes.length = 0; window.__allCubeMeshes.length=0; window.__edgeLines.length=0;
 
-  // Rotazione con drag (mouse/touch) sullo sfondo
-  let dragging = false, px = 0, py = 0;
-  function onPointerDown(e) { dragging = true; px = e.clientX; py = e.clientY; }
-  function onPointerUp()   { dragging = false; }
-  function onPointerMove(e) {
-    if (!dragging) return;
-    const dx = (e.clientX - px) / 140;
-    const dy = (e.clientY - py) / 140;
-    root.rotation.y += dx;
-    root.rotation.x = Math.max(-1, Math.min(1, root.rotation.x + dy));
-    px = e.clientX; py = e.clientY;
-  }
-  renderer.domElement.addEventListener('pointerdown', onPointerDown);
-  window.addEventListener('pointerup', onPointerUp);
-  window.addEventListener('pointermove', onPointerMove);
-
-  // =================== Geometrie / Materiali ===================
-  const LAYERS = [5, 4, 3, 2, 1];  // 5×5 -> 1×1
-  const STEP = 2.6;                // passo orizzontale/verticale
-  const STEP_Y = 2.6;              // distanze tra layer
-  const SIZE = 2.5;                // lato cubo
-  const GEO_BOX = new THREE.BoxGeometry(SIZE, SIZE, SIZE);
-
-  // Crea texture con numero centrato; bgColor dipende da errore o meno
-  const _texCache = new Map(); // key: `${num}-${bg}`
-  function makeNumberTexture(num, bg = '#fff', fg = '#111') {
-    const key = `${num}-${bg}-${fg}`;
-    if (_texCache.has(key)) return _texCache.get(key);
-
-    const c = document.createElement('canvas');
-    c.width = c.height = 256;
-    const g = c.getContext('2d');
-
-    g.fillStyle = bg;
-    g.fillRect(0, 0, 256, 256);
-
-    g.fillStyle = fg;
-    g.font = 'bold 170px system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    // Piccola compensazione verticale per ottica
-    g.fillText(String(num), 128, 142);
-
-    const tx = new THREE.CanvasTexture(c);
-    tx.anisotropy = 4;
-    tx.needsUpdate = true;
-    _texCache.set(key, tx);
-    return tx;
-  }
-
-  // Materiali per tutte le 6 facce con lo stesso numero
-  function matsFor(num, isError = false) {
-    const bg = isError ? '#ff3b30' : '#ffffff';
-    const fg = '#111111';
-    const tx = makeNumberTexture(num, bg, fg);
-    const m = new THREE.MeshBasicMaterial({ map: tx });
-    return [m, m, m, m, m, m];
-  }
-
-  // Bordo nero (come KubeApp)
-  function makeEdges(mesh) {
-    const geoE = new THREE.EdgesGeometry(mesh.geometry, 20);
-    const lines = new THREE.LineSegments(geoE, new THREE.LineBasicMaterial({ color: 0x111111 }));
-    lines.position.copy(mesh.position);
-    lines.rotation.copy(mesh.rotation);
-    lines.scale.copy(mesh.scale);
-    return lines;
-  }
-
-  // Coordinate centrate per (layer l, i orizzontale, j profondità)
-  function posFor(l, i, j) {
+  for (let l=0; l<LAYERS.length; l++){
     const N = LAYERS[l];
-    const x = (i - (N - 1) / 2) * STEP;
-    // Front row = j=0 è più vicino alla camera (z grande)
-    const z = ((N - 1) / 2 - j) * STEP;
-    const y = -l * STEP_Y;
-    return new THREE.Vector3(x, y, z);
-  }
-
-  // =================== Strutture dati ===================
-  // Conserviamo TUTTI i cubi, ma giochiamo sulla "diagonale" frontale (wedge)
-  const cubes = []; // [{mesh, edge, l,i,j, wedge, value}]
-  const wedgeByLayer = []; // array di array di cubi solo per j==l (la "scala" centrale)
-  // Valori della "scala" logica (wedge): values[l][i] (l=0..4, i variabili)
-  const values = LAYERS.map(N => Array(N).fill(null));
-
-  // =================== Costruzione scena ===================
-  function buildPyramid() {
-    // pulizia
-    for (const c of cubes) {
-      root.remove(c.mesh);
-      root.remove(c.edge);
+    for (let i=0;i<N;i++) for (let j=0;j<N;j++){
+      const m = new THREE.Mesh(GEO, matsFor(null));
+      m.position.copy(posFor(l,i,j)); scene.add(m);
+      const egeo = new THREE.EdgesGeometry(GEO);
+      const eln  = new THREE.LineSegments(egeo, new THREE.LineBasicMaterial({color:getCSS('--edge','#000')}));
+      eln.position.copy(m.position); scene.add(eln);
+      const cell = {mesh:m, edges:eln, layer:l, i, j, value:null};
+      cubes.push(cell); window.__allCubeMeshes.push(m); window.__edgeLines.push(eln);
     }
-    cubes.length = 0;
-    wedgeByLayer.length = 0;
+  }
+}
+buildPyramid();
 
-    for (let l = 0; l < LAYERS.length; l++) {
-      const N = LAYERS[l];
-      wedgeByLayer[l] = [];
+/* ---------- Render loop ---------- */
+let _dirty=true; function requestRender(){ _dirty=true; }
+(function loop(){ if(_dirty){renderer.render(scene,camera); _dirty=false;} requestAnimationFrame(loop); })();
 
-      for (let i = 0; i < N; i++) {
-        for (let j = 0; j < N; j++) {
-          const mesh = new THREE.Mesh(GEO_BOX, matsFor(''));
-          // all'inizio “cubi bianchi vuoti”: uso materiale bianco senza numero
-          mesh.material = Array(6).fill(new THREE.MeshBasicMaterial({ color: 0xffffff }));
-          mesh.position.copy(posFor(l, i, j));
-          root.add(mesh);
+/* ---------- Resize ---------- */
+function onResize(){
+  const w=stage.clientWidth, h=stage.clientHeight;
+  camera.aspect=w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h); requestRender();
+}
+addEventListener('resize', onResize, {passive:true}); onResize();
 
-          const edge = makeEdges(mesh);
-          root.add(edge);
+/* ---------- Rotazione mouse/touch ---------- */
+let dragging=false, px=0, py=0;
+renderer.domElement.addEventListener('pointerdown',(e)=>{dragging=true;px=e.clientX;py=e.clientY;});
+addEventListener('pointerup',()=>dragging=false);
+addEventListener('pointermove',(e)=>{
+  if(!dragging) return;
+  const dx=(e.clientX-px)/140, dy=(e.clientY-py)/140;
+  scene.rotation.y += dx; scene.rotation.x += dy;
+  px=e.clientX; py=e.clientY; requestRender();
+});
 
-          const node = { mesh, edge, l, i, j, wedge: false, value: null };
-          cubes.push(node);
-        }
-      }
+/* ================= LOGICA DI GIOCO ================= */
 
-      // Marca la "riga" della diagonale che usiamo per il gioco: quella con j==l
-      const Nw = LAYERS[l];
-      for (let i = 0; i < Nw; i++) {
-        const node = cubes.find(o => o.l === l && o.i === i && o.j === l);
-        node.wedge = true;
-        wedgeByLayer[l][i] = node;
-      }
+function idxBase(layer){ let s=0; for(let t=0;t<layer;t++) s+=LAYERS[t]*LAYERS[t]; return s; }
+function getCell(layer,i,j){
+  const N=LAYERS[layer]; if(i<0||j<0||i>=N||j>=N) return null;
+  return cubes[idxBase(layer)+ i*N + j];
+}
+function setCellValue(cell,val,asError=false){
+  cell.value=val;
+  cell.mesh.material.forEach(m=>{ if(m.map){m.map.dispose(); m.map=null;} });
+  const mats = matsFor(val, asError?getCSS('--dup','#ff3b30'):null);
+  cell.mesh.material = mats;
+  cell.edges.material.color.set(getCSS('--edge','#000'));
+}
+
+function recomputeAll(){
+  // Layer 0 = baseValues (così come inseriti dall'utente)
+  for (let i=0;i<5;i++){
+    for (let j=0;j<5;j++){
+      setCellValue(getCell(0,i,j), baseValues[i][j], false);
     }
-
-    // Posiziona la piramide un po' più in alto a schermo
-    root.position.y = 6;
   }
 
-  // =================== UI palette ===================
-  function buildPalette() {
-    if (!paletteEl) return;
-    paletteEl.innerHTML = '';
-    for (let n = 1; n <= 15; n++) {
-      const chip = document.createElement('button');
-      chip.className = 'chip';
-      chip.textContent = n;
-      chip.dataset.value = String(n);
-      paletteEl.appendChild(chip);
-    }
-    paletteEl.addEventListener('click', onPickNumber);
-  }
-
-  let selectedNumber = null;
-  function onPickNumber(e) {
-    const btn = e.target.closest('.chip');
-    if (!btn) return;
-
-    // Attiva/disattiva selezione
-    if (selectedNumber === Number(btn.dataset.value)) {
-      selectedNumber = null;
-      for (const c of paletteEl.querySelectorAll('.chip')) c.classList.remove('active');
-      return;
-    }
-    selectedNumber = Number(btn.dataset.value);
-    for (const c of paletteEl.querySelectorAll('.chip')) c.classList.remove('active');
-    btn.classList.add('active');
-  }
-
-  // =================== Raycasting e inserimento ===================
-  const raycaster = new THREE.Raycaster();
-  const pointer = new THREE.Vector2();
-
-  function getIntersections(ev) {
-    const rect = renderer.domElement.getBoundingClientRect();
-    pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(pointer, camera);
-    return raycaster.intersectObjects(root.children, false);
-  }
-
-  // Clic sul canvas: se tocco un cubo della fila frontale del layer 0 → inserisco
-  function onClickCanvas(ev) {
-    const hits = getIntersections(ev);
-    if (!hits.length) return;
-
-    // Trova il primo nodo “wedge”
-    let pick = null;
-    for (const h of hits) {
-      const o = cubes.find(c => c.mesh === h.object);
-      if (!o) continue;
-      if (o.wedge && o.l === 0) { pick = o; break; } // solo fila frontale del layer 0
-    }
-    if (!pick) return;
-
-    if (selectedNumber == null) return;   // nessun numero selezionato
-    if (selectedNumber < 1 || selectedNumber > 15) return;
-
-    // Imposta il valore scelto sul cubo selezionato (fila frontale, l=0)
-    setValueAtTopIndex(pick.i, selectedNumber);
-    recomputeAll();
-    repaintAll();
-  }
-  renderer.domElement.addEventListener('click', onClickCanvas);
-
-  // =================== Logica valori ===================
-  function clearAll() {
-    for (let l = 0; l < values.length; l++) {
-      values[l].fill(null);
-    }
-    repaintAll();
-    updateStatus();
-  }
-
-  function setValueAtTopIndex(i, v) {
-    values[0][i] = v;
-  }
-
-  // Calcola le differenze assolute giù per la “scala”
-  function recomputeAll() {
-    // a scendere l=1..4, calcolo da riga superiore
-    for (let l = 1; l < LAYERS.length; l++) {
-      for (let i = 0; i < LAYERS[l]; i++) {
-        const a = values[l - 1][i];
-        const b = values[l - 1][i + 1];
-        if (isFinite(a) && isFinite(b)) {
-          values[l][i] = Math.abs(a - b);
-        } else {
-          values[l][i] = null;
-        }
-      }
-    }
-    updateStatus();
-  }
-
-  // Evidenzia duplicati su TUTTI i livelli (incluso 0) + marca 0 come errore
-  function computeDuplicateSet() {
-    const seen = new Map(); // num -> count
-    for (let l = 0; l < values.length; l++) {
-      for (let i = 0; i < values[l].length; i++) {
-        const v = values[l][i];
-        if (v == null) continue;
-        seen.set(v, (seen.get(v) || 0) + 1);
-      }
-    }
-    const dups = new Set();
-    for (const [k, cnt] of seen) {
-      if (k === 0 || cnt > 1) dups.add(k);
-    }
-    return dups;
-  }
-
-  // Conta quante DIFFERENZE uniche (1..15) ci sono tra i blocchi inferiori (l >= 1)
-  function countUniqueDifferences() {
-    const uni = new Set();
-    for (let l = 1; l < values.length; l++) {
-      for (const v of values[l]) {
-        if (v == null || v === 0) continue; // 0 non ammesso
-        uni.add(v);
-      }
-    }
-    return uni.size; // su 10 possibili
-  }
-
-  function updateStatus() {
-    if (!statusEl) return;
-    statusEl.innerHTML = `Differenze uniche: <b>${countUniqueDifferences()}/10</b>`;
-  }
-
-  // Ridisegna TUTTO usando values + duplicati
-  function repaintAll() {
-    const dupSet = computeDuplicateSet();
-
-    // Prima ripristina tutti i cubi a bianco “vuoto”
-    for (const c of cubes) {
-      c.value = null;
-      c.mesh.material = Array(6).fill(new THREE.MeshBasicMaterial({ color: 0xffffff }));
-    }
-
-    // Poi applica i numeri solo alla "scala" (j==l)
-    for (let l = 0; l < LAYERS.length; l++) {
-      for (let i = 0; i < LAYERS[l]; i++) {
-        const node = wedgeByLayer[l][i];
-        const v = values[l][i];
-        if (v == null) continue;
-
-        const isErr = v === 0 || dupSet.has(v);
-        node.value = v;
-        node.mesh.material = matsFor(v, isErr);
+  // Layer inferiori (2D): B[i,j] = max(|A[i,j]-A[i+1,j]|, |A[i,j]-A[i,j+1]|)
+  for (let L=1; L<LAYERS.length; L++){
+    const N = LAYERS[L];
+    const P = L-1;
+    for (let i=0;i<N;i++){
+      for (let j=0;j<N;j++){
+        const a00 = getCell(P,i,j)?.value;
+        const a10 = getCell(P,i+1,j)?.value;
+        const a01 = getCell(P,i,j+1)?.value;
+        const v = (a00==null||a10==null||a01==null) ? null : Math.max(Math.abs(a00-a10), Math.abs(a00-a01));
+        setCellValue(getCell(L,i,j), v, false);
       }
     }
   }
 
-  // =================== Azioni: Mescola e Reset ===================
-  function shuffleTop5() {
-    // scegli 5 numeri diversi da 1..15
-    const pool = Array.from({ length: 15 }, (_, k) => k + 1);
-    const pick = [];
-    for (let i = 0; i < 5; i++) {
-      const idx = Math.floor(Math.random() * pool.length);
-      pick.push(pool.splice(idx, 1)[0]);
+  // Evidenzia duplicati (e 0) SOLTANTO sulla base; riflette la texture rossa anche ai livelli sotto
+  const freq=new Map();
+  for (let i=0;i<5;i++) for (let j=0;j<5;j++){
+    const v=baseValues[i][j];
+    if (v!=null && v>0) freq.set(v,(freq.get(v)||0)+1);
+  }
+  const dup=new Set(); for (const [n,c] of freq) if (c>1) dup.add(n);
+  for (let i=0;i<5;i++) for (let j=0;j<5;j++){
+    const v=baseValues[i][j];
+    if (v===0 || dup.has(v)){
+      const c=getCell(0,i,j);
+      c.mesh.material.forEach(m=>{ if(m.map){m.map.dispose(); m.map=null;} });
+      c.mesh.material = matsFor(v, getCSS('--dup','#ff3b30'));
     }
-    for (let i = 0; i < 5; i++) values[0][i] = pick[i];
-    recomputeAll();
-    repaintAll();
-
-    // aggiorna stato palette (opzionale: segna selezionati)
-    for (const c of paletteEl.querySelectorAll('.chip')) c.classList.remove('active');
-    selectedNumber = null;
   }
 
-  function resetAll() {
-    clearAll();
-    // pulisci stato palette
-    for (const c of paletteEl.querySelectorAll('.chip')) c.classList.remove('active');
-    selectedNumber = null;
+  repaintStatus(); requestRender();
+}
+
+function repaintStatus(){
+  // Conta quante celle non-null nei 4 livelli inferiori (massimo 16+9+4+1 = 30)
+  let filled=0, values=[];
+  for (let L=1; L<LAYERS.length; L++){
+    const N=LAYERS[L];
+    for (let i=0;i<N;i++) for (let j=0;j<N;j++){
+      const v=getCell(L,i,j).value;
+      if (v!=null){ filled++; values.push(v); }
+    }
   }
+  // Mostriamo “differenze uniche” come size dell’insieme delle celle calcolate
+  const uniq = new Set(values).size;
+  document.getElementById('status').innerHTML = `Differenze uniche: <b>${uniq}/30</b>`;
+}
 
-  if (btnShuffle) btnShuffle.addEventListener('click', shuffleTop5);
-  if (btnReset)   btnReset.addEventListener('click', resetAll);
+/* Palette 1..15 */
+const pal=document.getElementById('palette');
+(function buildPalette(){
+  for(let n=1;n<=15;n++){
+    const d=document.createElement('div'); d.className='chip'; d.textContent=n;
+    d.addEventListener('click',()=>{
+      selectedNumber=n; pal.querySelectorAll('.chip').forEach(x=>x.classList.remove('active')); d.classList.add('active');
+    });
+    pal.appendChild(d);
+  }
+  pal.firstChild.classList.add('active'); selectedNumber=1;
+})();
 
-  // =================== Avvio ===================
-  buildPyramid();
-  buildPalette();
-  clearAll();
+/* Picking QUALSIASI base cell (layer 0, i=0..4, j=0..4) */
+const raycaster=new THREE.Raycaster(); const mouse=new THREE.Vector2();
+function pickBaseCell(x,y){
+  const r=renderer.domElement.getBoundingClientRect();
+  mouse.x=((x-r.left)/r.width)*2-1; mouse.y=-((y-r.top)/r.height)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  // raccogliamo TUTTE le mesh del layer 0
+  const baseMeshes=[]; for(let i=0;i<5;i++) for(let j=0;j<5;j++) baseMeshes.push(getCell(0,i,j).mesh);
+  const hits=raycaster.intersectObjects(baseMeshes,false);
+  if(!hits.length) return null;
+  // risaliamo a i,j
+  const mesh = hits[0].object;
+  for (let i=0;i<5;i++) for (let j=0;j<5;j++){
+    if (getCell(0,i,j).mesh === mesh) return {i,j};
+  }
+  return null;
+}
+renderer.domElement.addEventListener('click',(ev)=>{
+  const slot = pickBaseCell(ev.clientX, ev.clientY);
+  if (!slot) return;
+  const v = selectedNumber|0; if(!(v>=1 && v<=15)) return;
+  baseValues[slot.i][slot.j] = v;
+  recomputeAll();
+});
 
-  // Render loop
-  (function loop() {
-    renderer.render(scene, camera);
-    requestAnimationFrame(loop);
-  })();
+/* Bottoni */
+document.getElementById('btn-reset').addEventListener('click',()=>{
+  for (let i=0;i<5;i++) for (let j=0;j<5;j++) baseValues[i][j]=null;
+  recomputeAll();
+});
+document.getElementById('btn-shuffle').addEventListener('click',()=>{
+  // Inserisce 5 numeri distinti casuali in 5 posizioni casuali della base; le altre restano vuote
+  for (let i=0;i<5;i++) for (let j=0;j<5;j++) baseValues[i][j]=null;
+  const coords=[]; for (let i=0;i<5;i++) for (let j=0;j<5;j++) coords.push([i,j]);
+  coords.sort(()=>Math.random()-.5);
+  const nums = Array.from({length:15},(_,k)=>k+1).sort(()=>Math.random()-.5).slice(0,5);
+  for (let k=0;k<5;k++){ const [i,j]=coords[k]; baseValues[i][j]=nums[k]; }
+  recomputeAll();
+});
 
+/* Primo render */
+recomputeAll();
+
+/* ================= Tema / Impostazioni Kube ================= */
+(function settingsBlock(){
+  const DEFAULTS={brand:'#0b5fff',bg:'#0c0f14',ink:'#ffffff',cube:'#ffffff',edge:'#000000',dup:'#ff3b30'};
+  const LS_KEY='piramide.theme.v1';
+  const $=(id)=>document.getElementById(id);
+  function load(){ try{return {...DEFAULTS, ...(JSON.parse(localStorage.getItem(LS_KEY))||{})}; }catch{ return {...DEFAULTS}; } }
+  function save(t){ localStorage.setItem(LS_KEY, JSON.stringify(t)); }
+  function apply(t){
+    const r=document.documentElement.style;
+    r.setProperty('--brand',t.brand); r.setProperty('--bg',t.bg); r.setProperty('--ink',t.ink);
+    r.setProperty('--cube',t.cube);   r.setProperty('--edge',t.edge); r.setProperty('--dup',t.dup);
+    const meta=document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute('content',t.brand);
+    // rigenera tutte le texture coerenti
+    for (const c of cubes){
+      c.mesh.material.forEach(m=>{ if(m.map){m.map.dispose(); m.map=null;} });
+      c.mesh.material = matsFor(c.value,null);
+    }
+    for(const ln of window.__edgeLines) ln.material.color.set(getCSS('--edge','#000'));
+    requestRender();
+  }
+  let THEME=load(); apply(THEME);
+
+  const dlg=$('settings'), open=$('btn-settings'), saveBtn=$('btn-save-theme'), resetBtn=$('btn-reset-theme');
+  const cBar=$('c-bar'),cBg=$('c-bg'),cInk=$('c-ink'),cCube=$('c-cube'),cEdge=$('c-edge'),cDup=$('c-dup');
+  function fill(){ cBar.value=THEME.brand; cBg.value=THEME.bg; cInk.value=THEME.ink; cCube.value=THEME.cube; cEdge.value=THEME.edge; cDup.value=THEME.dup; }
+  open?.addEventListener('click',()=>{ fill(); dlg.showModal(); });
+  saveBtn?.addEventListener('click',(e)=>{ e.preventDefault(); THEME={brand:cBar.value,bg:cBg.value,ink:cInk.value,cube:cCube.value,edge:cEdge.value,dup:cDup.value}; save(THEME); apply(THEME); dlg.close(); recomputeAll(); });
+  resetBtn?.addEventListener('click',()=>{ THEME={...DEFAULTS}; save(THEME); apply(THEME); fill(); recomputeAll(); });
+
+  $('btn-theme-kube')?.addEventListener('click',()=>{ cBar.value='#0b5fff'; cBg.value='#0c0f14'; cInk.value='#ffffff'; cCube.value='#ffffff'; cEdge.value='#000000'; cDup.value='#ff3b30'; });
+  $('btn-theme-dark')?.addEventListener('click',()=>{ cBar.value='#111827'; cBg.value='#0a0d12'; cInk.value='#f5f7ff'; cCube.value='#ffffff'; cEdge.value='#000000'; cDup.value='#ff3b30'; });
+  $('btn-theme-light')?.addEventListener('click',()=>{ cBar.value='#2563eb'; cBg.value='#f6f7fb'; cInk.value='#0b1020'; cCube.value='#ffffff'; cEdge.value='#000000'; cDup.value='#d92d20'; });
+})();
 })();
