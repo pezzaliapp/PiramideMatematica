@@ -1,349 +1,105 @@
 <!doctype html>
 <html lang="it">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>La Piramide Matematica 3D — 5×5→1</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>La Piramide Matematica 3D — 5×5→1</title>
 
-<!-- Font stile KubeApp -->
-<link href="https://fonts.googleapis.com/css2?family=Bungee:wght@400&family=Inter:wght@600;800&display=swap" rel="stylesheet">
+  <!-- Font stile KubeApp -->
+  <link href="https://fonts.googleapis.com/css2?family=Bungee:wght@400&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#0b5fff">
 
-<style>
-  :root{
-    --brand:#0b5fff; --ink:#0b0b0b; --bg:#ffffff; --red:#ff3b30;
-  }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
-  .bar{
-    position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-    padding:10px 14px;background:var(--brand);color:#fff;box-shadow:0 1px 0 rgba(0,0,0,.06)
-  }
-  .title{font-family:Bungee,Inter,system-ui,sans-serif;font-size:18px;letter-spacing:.3px}
-  .hint{flex-basis:100%;margin-top:-4px;font-size:12px;opacity:.9}
-  #stage{height:calc(100vh - 94px);touch-action:none}
+  <style>
+    :root{
+      --brand:#0b5fff; --ink:#ffffff; --bg:#0c0f14; --dup:#ff3b30;
+      --cube:#ffffff;  --edge:#000000;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+      font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .bar{
+      position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+      padding:10px 14px;background:var(--brand);color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.06)
+    }
+    .title{font-family:Bungee,Inter,system-ui,sans-serif;font-size:18px;font-weight:800;letter-spacing:.3px;margin-right:auto}
+    .row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+    .chip{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;
+      border:2px solid #fff;background:#fff;color:#111;font-weight:800;border-radius:999px;cursor:pointer;user-select:none;
+      box-shadow:0 0 1px rgba(0,0,0,.2) inset}
+    .chip.active{outline:2px solid rgba(0,0,0,.25)}
+    .btn,.icon-btn{border:0;border-radius:10px;padding:8px 12px;background:#fff;color:#111;font-weight:800;cursor:pointer}
+    .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px}
+    .status{font-weight:800;opacity:.9}
+    #stage{height:calc(100vh - 94px);touch-action:none}
 
-  .row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
-  .chip{
-    width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;
-    border:2px solid #fff;background:#fff;color:var(--ink);font-weight:800;border-radius:999px;
-    cursor:pointer;user-select:none;box-shadow:0 0 0 1px rgba(0,0,0,.2) inset
-  }
-  .chip.active{outline:2px solid rgba(0,0,0,.25)}
-  .btn{border:0;border-radius:10px;padding:8px 12px;background:#fff;color:var(--brand);font-weight:800;cursor:pointer;user-select:none}
-  .status{font-weight:800}
-  .spacer{flex:1}
+    /* Badge frontale stile Kube */
+    .badge{
+      position:absolute;left:14px;top:56px;padding:6px 10px;font-size:12px;font-weight:700;
+      background:#111;color:#fff;border-radius:999px;box-shadow:0 10px 26px rgba(0,0,0,.25);pointer-events:none
+    }
 
-  /* Intro teatrale */
-  .intro-enter{opacity:0; transform:translateY(12px) scale(.98)}
-  .intro-ready{transition:opacity .8s ease, transform .8s ease}
-  .intro-show{opacity:1; transform:translateY(0) scale(1)}
-  .wobble{animation:wob 1.6s ease 1s both}
-  @keyframes wob{ 0%{transform:rotateX(0) rotateY(0)} 40%{transform:rotateX(-.06turn)} 70%{transform:rotateY(.06turn)} 100%{transform:rotateX(0) rotateY(0)} }
+    /* Settings dialog */
+    dialog.settings{border:0;border-radius:16px;padding:18px 18px 12px;width:min(520px,92vw)}
+    dialog::backdrop{background:rgba(0,0,0,.4)}
+    .settings h2{margin:0 0 10px;font-family:Bungee,Inter,sans-serif}
+    .settings fieldset{border:1px solid #ddd;border-radius:12px;padding:12px;margin:10px 0}
+    .settings legend{font-weight:700}
+    .settings .grid{display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:center}
+    .settings menu{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
 
-  /* Badge FRONTE */
-  .badge{
-    position:absolute;left:14px;top:56px;background:#111;color:#fff;border-radius:999px;
-    padding:4px 8px;font-size:11px;opacity:.14;pointer-events:none
-  }
-
-  @media (max-width:600px){
-    #stage{height:calc(100vh - 150px)}
-  }
-</style>
+    @media (max-width:600px){#stage{height:calc(100vh - 150px)}}
+  </style>
 </head>
 <body>
-  <div class="bar intro-enter intro-ready" id="ui">
-    <div class="title">La Piramide Matematica</div>
-    <div class="spacer"></div>
-    <div class="row" id="palette"></div>
-    <button class="btn" id="btn-shuffle" title="Imposta 5 numeri casuali in cima">Mescola 5</button>
+  <div class="bar">
+    <div class="title">LA PIRAMIDE MATEMATICA</div>
+
+    <div id="palette" class="row" aria-label="Scegli un numero da 1 a 15"></div>
+
+    <button class="btn" id="btn-shuffle">Mescola 5</button>
     <button class="btn" id="btn-reset">Reset</button>
+
     <div class="status" id="status">Differenze uniche: <b>0/10</b></div>
-    <div class="hint">Seleziona un numero <b>1–15</b>, poi tocca un cubo della <b>fila base (5×5)</b>. Trascina sullo sfondo per ruotare.</div>
+
+    <button class="icon-btn" id="btn-settings" title="Impostazioni" aria-label="Impostazioni">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path fill="currentColor"
+          d="M12 8a4 4 0 100 8 4 4 0 000-8zm9.4 4a7.5 7.5 0 00-.1-1l2-1.6-2-3.5-2.4 1a7.5 7.5 0 00-1.7-1l-.4-2.6H9.2l-.4 2.6a7.5 7.5 0 00-1.7 1l-2.4-1-2 3.5 2 1.6a7.5 7.5 0 000 2l-2 1.6 2 3.5 2.4-1a7.5 7.5 0 001.7 1l.4 2.6h5.8l.4-2.6a7.5 7.5 0 001.7-1l2.4 1 2-3.5-2-1.6c.1-.3.1-.7.1-1z"/>
+      </svg>
+    </button>
   </div>
 
-  <div id="stage" aria-label="Piramide 3D">
-    <div class="badge">FRONTE</div>
-  </div>
+  <div class="badge">LA PIRAMIDE MATEMATICA</div>
+  <div id="stage" aria-label="Piramide di cubi 3D"></div>
 
-  <!-- Three.js da CDN (affidabile e immediato) -->
-  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <!-- Pannello Impostazioni -->
+  <dialog id="settings" class="settings">
+    <form method="dialog">
+      <h2>Impostazioni</h2>
+      <fieldset>
+        <legend>Tema</legend>
+        <div class="grid">
+          <label>Barra</label>        <input type="color" id="c-bar" value="#0b5fff">
+          <label>Sfondo</label>       <input type="color" id="c-bg"  value="#0c0f14">
+          <label>Inchiostro</label>   <input type="color" id="c-ink" value="#ffffff">
+          <label>Colore cubi</label>  <input type="color" id="c-cube" value="#ffffff">
+          <label>Bordo cubi</label>   <input type="color" id="c-edge" value="#000000">
+          <label>Errore</label>       <input type="color" id="c-dup" value="#ff3b30">
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" id="btn-theme-kube" type="button">KubeApp</button>
+          <button class="btn" id="btn-theme-dark" type="button">Dark</button>
+          <button class="btn" id="btn-theme-light" type="button">Light</button>
+        </div>
+      </fieldset>
+      <menu>
+        <button class="btn" value="cancel">Chiudi</button>
+        <button class="btn" id="btn-save-theme" value="default">Salva</button>
+        <button class="btn" id="btn-reset-theme" type="button">Ripristina</button>
+      </menu>
+    </form>
+  </dialog>
 
-<script>
-/* =========================================================
-   Piramide 5×5 → 4×4 → 3×3 → 2×2 → 1×1 — Stile “KubeApp”
-   - Inserisci 1..15 solo nella base 5×5 (niente 0)
-   - Ogni numero appare su tutte e 6 le facce del cubo
-   - Propagazione differenze 2D: below(L+1,i,j)=|top(L,i,j)-top(L,i+1,j+1)|
-   - Duplicati (>1 occorrenza dello stesso n>0) evidenziati in rosso
-   - Mescola 5 (riempie 5 slot a caso nella base), Reset
-   ========================================================= */
-(function(){
-  'use strict';
-
-  // ======= Config =======
-  const LAYERS = [5,4,3,2,1];     // dall’alto verso il basso
-  const SIZE   = 1.35;             // lato cubo
-  const GAP    = 0.06;             // spazio tra cubi
-  const STEP   = SIZE + GAP;
-  const STEP_Y = SIZE + GAP;
-  const PALETTE_VALUES = Array.from({length:15},(_,i)=>i+1); // 1..15
-
-  // ======= Stato =======
-  const topValues = Array.from({length:5},()=>Array(5).fill(0)); // base 5×5 inserita dall’utente
-  const layers = [];            // valori di tutti i layer
-  const meshes = [];            // [L][i][j] -> mesh
-  let selected = null;          // numero selezionato in palette
-
-  // ======= UI =======
-  const ui = document.getElementById('ui');
-  const stage = document.getElementById('stage');
-  const statusEl = document.getElementById('status');
-
-  // Palette 1..15
-  const pal = document.getElementById('palette');
-  PALETTE_VALUES.forEach(v=>{
-    const d=document.createElement('div');
-    d.className='chip'; d.textContent=v;
-    d.addEventListener('click', ()=>{
-      selected=v;
-      pal.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active', c===d));
-    });
-    pal.appendChild(d);
-  });
-
-  document.getElementById('btn-reset').addEventListener('click', resetAll);
-  document.getElementById('btn-shuffle').addEventListener('click', shuffleFive);
-
-  // ======= Three.js =======
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000); // “cam vision” scuro
-  const camera = new THREE.PerspectiveCamera(42, 1, .1, 1000);
-  camera.position.set(0, 19, 36);
-  camera.lookAt(0,0,0);
-
-  const renderer = new THREE.WebGLRenderer({antialias:true});
-  renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
-  renderer.setSize(stage.clientWidth, stage.clientHeight);
-  stage.appendChild(renderer.domElement);
-
-  scene.add(new THREE.AmbientLight(0xffffff, .9));
-  const dir = new THREE.DirectionalLight(0xffffff, .45);
-  dir.position.set(12,18,16);
-  scene.add(dir);
-
-  const group = new THREE.Group();
-  scene.add(group);
-
-  // ======= Geometrie / Materiali =======
-  const boxGeo = new THREE.BoxGeometry(SIZE,SIZE,SIZE);
-  const emptyMat = new THREE.MeshLambertMaterial({color:0xffffff});
-  const edgeMat  = new THREE.LineBasicMaterial({color:0x111111});
-
-  function addEdges(mesh){
-    const eg=new THREE.EdgesGeometry(boxGeo);
-    const ln=new THREE.LineSegments(eg, edgeMat);
-    mesh.add(ln);
-  }
-
-  // cache materiali per (n, invalid)
-  const matCache = new Map();
-  function numberTexture(n, col='#111', bg='#fff'){
-    const c=document.createElement('canvas'); c.width=c.height=256;
-    const g=c.getContext('2d');
-    g.fillStyle=bg; g.fillRect(0,0,256,256);
-    g.fillStyle=col;
-    g.font='bold 170px Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
-    g.textAlign='center'; g.textBaseline='middle';
-    g.fillText(n,128,142);
-    const t=new THREE.CanvasTexture(c); t.anisotropy=2; t.needsUpdate=true;
-    return t;
-  }
-  function matsFor(n, invalid){
-    const key = n+'-'+(invalid?1:0);
-    if (matCache.has(key)) return matCache.get(key);
-    const col = invalid ? '#ffffff' : '#111111';
-    const bg  = invalid ? '#ff3b30' : '#ffffff';
-    const map = numberTexture(n, col, bg);
-    const faces = new Array(6).fill(0).map(()=>new THREE.MeshBasicMaterial({map}));
-    matCache.set(key, faces);
-    return faces;
-  }
-
-  function posFor(L,i,j){
-    const N = LAYERS[L];
-    const x = (i-(N-1)/2)*STEP;
-    const z = (j-(N-1)/2)*STEP;
-    const y = -L*STEP_Y;
-    return new THREE.Vector3(x,y,z);
-  }
-
-  function buildPyramid(){
-    while(group.children.length) group.remove(group.children[0]);
-    meshes.length=0; layers.length=0;
-    for (let L=0; L<LAYERS.length; L++){
-      const N = LAYERS[L];
-      const layerMeshes=[]; const layerVals=Array.from({length:N},()=>Array(N).fill(0));
-      for (let i=0;i<N;i++){
-        const row=[];
-        for (let j=0;j<N;j++){
-          const m=new THREE.Mesh(boxGeo, emptyMat);
-          m.position.copy(posFor(L,i,j));
-          m.userData={L,i,j};
-          addEdges(m);
-          group.add(m);
-          row.push(m);
-        }
-        layerMeshes.push(row);
-      }
-      meshes.push(layerMeshes);
-      layers.push(layerVals);
-    }
-    // centratura + intro wobble
-    const totalH=(LAYERS.length-1)*STEP_Y + SIZE;
-    group.position.y = totalH*0.28;
-    group.scale.set(.001,.001,.001);
-    group.rotation.set(-0.08, 0.35, 0);
-    ui.classList.add('intro-show');
-    setTimeout(()=>{ group.scale.set(1,1,1); }, 60);
-  }
-
-  buildPyramid();
-  paintAll();
-
-  // ======= Raycast / Input =======
-  const raycaster = new THREE.Raycaster();
-  const pointer = new THREE.Vector2();
-  function pickBase(ev){
-    const r = renderer.domElement.getBoundingClientRect();
-    pointer.x = ((ev.clientX - r.left)/r.width)*2 - 1;
-    pointer.y = -((ev.clientY - r.top)/r.height)*2 + 1;
-    raycaster.setFromCamera(pointer, camera);
-    const hits = raycaster.intersectObjects(group.children, true);
-    for (const h of hits){
-      const host = h.object.userData.L===undefined ? h.object.parent : h.object;
-      if (host && host.userData && host.userData.L===0) return host;
-    }
-    return null;
-  }
-  renderer.domElement.addEventListener('click', ev=>{
-    const target = pickBase(ev);
-    if (!target || selected==null) return;
-    const {i,j} = target.userData; // L=0 sicuro
-    setTopValue(i,j,selected);
-  });
-
-  // Drag per ruotare
-  let dragging=false, px=0, py=0;
-  renderer.domElement.addEventListener('pointerdown', e=>{dragging=true; px=e.clientX; py=e.clientY;});
-  window.addEventListener('pointerup', ()=> dragging=false);
-  window.addEventListener('pointermove', e=>{
-    if(!dragging) return;
-    const dx=(e.clientX-px)/150, dy=(e.clientY-py)/150;
-    group.rotation.y += dx; group.rotation.x += dy;
-    px=e.clientX; py=e.clientY;
-  }, {passive:true});
-
-  // ======= Logica gioco =======
-  function setTopValue(i,j,val){
-    if (!(val>=1 && val<=15)) return; // niente 0
-    topValues[i][j]=val;
-    recomputeAll();
-  }
-
-  function recomputeAll(){
-    // layer 0 = topValues
-    for (let i=0;i<5;i++) for (let j=0;j<5;j++) layers[0][i][j]=topValues[i][j]|0;
-    // differenze 2D: (i,j) vs (i+1,j+1)
-    for (let L=1; L<LAYERS.length; L++){
-      const N = LAYERS[L];
-      for (let i=0;i<N;i++){
-        for (let j=0;j<N;j++){
-          const a = layers[L-1][i][j]|0;
-          const b = layers[L-1][i+1][j+1]|0;
-          layers[L][i][j] = (a && b) ? Math.abs(a-b) : 0;
-        }
-      }
-    }
-    paintAll();
-  }
-
-  function computeDuplicatesMap(){
-    const freq=new Map();
-    for (let L=0; L<layers.length; L++){
-      const N = LAYERS[L];
-      for (let i=0;i<N;i++){
-        for (let j=0;j<N;j++){
-          const v=layers[L][i][j]|0;
-          if (v>0) freq.set(v,(freq.get(v)||0)+1);
-        }
-      }
-    }
-    return freq; // n -> occorrenze
-  }
-
-  function paintAll(){
-    const dups = computeDuplicatesMap();
-    for (let L=0; L<layers.length; L++){
-      const N=LAYERS[L];
-      for (let i=0;i<N;i++){
-        for (let j=0;j<N;j++){
-          const m = meshes[L][i][j];
-          const v = layers[L][i][j]|0;
-          if (v>0){
-            const invalid = (dups.get(v)||0) > 1;
-            m.material = matsFor(v, invalid);
-          }else{
-            m.material = emptyMat;
-          }
-        }
-      }
-    }
-    // Feedback “x/10”: contiamo la prima colonna dei livelli inferiori (4+3+2+1 = 10)
-    let filled=0;
-    for (let L=1; L<layers.length; L++){
-      const N=LAYERS[L];
-      for (let j=0;j<N && 0<N; j++){
-        // prendiamo i==0 della riga (diagonale “punta”)
-        if ((layers[L][0][j]|0)>0) filled++;
-      }
-    }
-    statusEl.innerHTML = `Differenze uniche: <b>${filled}/10</b>`;
-  }
-
-  function shuffleFive(){
-    // scegli 5 celle distinte random nella base e 5 numeri random 1..15
-    const coords=[]; for (let i=0;i<5;i++) for (let j=0;j<5;j++) coords.push([i,j]);
-    coords.sort(()=>Math.random()-.5);
-    const picks=coords.slice(0,5);
-    const nums = Array.from({length:15},(_,k)=>k+1).sort(()=>Math.random()-.5).slice(0,5);
-    // reset base prima
-    for (let i=0;i<5;i++) for (let j=0;j<5;j++) topValues[i][j]=0;
-    for (let k=0;k<5;k++){
-      const [i,j]=picks[k]; topValues[i][j]=nums[k];
-    }
-    recomputeAll();
-  }
-
-  function resetAll(){
-    for (let i=0;i<5;i++) for (let j=0;j<5;j++) topValues[i][j]=0;
-    selected=null; pal.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
-    recomputeAll();
-  }
-
-  // ======= Resize & Render =======
-  function onResize(){
-    const w=stage.clientWidth, h=stage.clientHeight;
-    camera.aspect=w/h; camera.updateProjectionMatrix();
-    renderer.setSize(w,h);
-  }
-  window.addEventListener('resize', onResize, {passive:true});
-  onResize();
-
-  (function loop(){ renderer.render(scene,camera); requestAnimationFrame(loop); })();
-
-  // attiva intro UI
-  requestAnimationFrame(()=> ui.classList.add('intro-show'));
-})();
-</script>
+  <script src="three.js"></script>
+  <script src="pyramid.js"></script>
 </body>
 </html>
