@@ -224,18 +224,20 @@ function unselectCell(){
   if(selectedCell){ selectedCell._sel=false; selectedCell=null; repaint(); }
 }
 
-/* ========== Picking frontale ========== */
-const ray=new THREE.Raycaster(), mouse=new THREE.Vector2();
+// ---- PICKING: solo i 5 cubi frontali del top ----
+const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
 function pickFront(clientX, clientY){
-  const r=renderer.domElement.getBoundingClientRect();
-  mouse.x=((clientX-r.left)/r.width)*2-1;
-  mouse.y=-((clientY-r.top)/r.height)*2+1;
-  ray.setFromCamera(mouse,camera);
-  const hits=ray.intersectObjects(cells.map(c=>c.mesh),false);
-  for(const h of hits){
-    const ud=h.object.userData;
-    if(ud && ud.layer===0 && ud.j===0){ // solo i 5 frontali del top
-      return cells.find(c=>c.layer===0 && c.i===ud.i && c.j===0) || null;
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((clientX - r.left) / r.width) * 2 - 1;
+  mouse.y = -((clientY - r.top) / r.height) * 2 + 1;
+  ray.setFromCamera(mouse, camera);
+
+  const hits = ray.intersectObjects(cells.map(c => c.mesh), false);
+  const FRONT_J = LAYERS[0] - 1;             // <-- colonna frontale (5x5 => j === 4)
+  for (const h of hits) {
+    const ud = h.object.userData;
+    if (ud && ud.layer === 0 && ud.j === FRONT_J) {
+      return cells.find(c => c.layer === 0 && c.i === ud.i && c.j === FRONT_J) || null;
     }
   }
   return null;
